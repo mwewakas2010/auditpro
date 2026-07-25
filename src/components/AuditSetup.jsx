@@ -1,8 +1,8 @@
-import { iso45001Clauses } from '../data/iso45001Clauses'
+import { STANDARD_LIST, getStandardInfo } from '../data/standards'
 import {
   AUDIT_TYPES,
   DISCONTINUATION_CONDITIONS,
-  DEFAULT_SCOPE_TEXT,
+  defaultScopeText,
   DEFAULT_METHODOLOGY_NARRATIVE,
   DEFAULT_SAMPLING_DISCLAIMER,
   DEFAULT_CONFIDENTIALITY_STATEMENT,
@@ -28,7 +28,7 @@ function Field({ label, children }) {
 const inputCls =
   'w-full px-2.5 py-2 border border-line rounded text-[13.5px] bg-[#FCFBF8] text-ink focus:outline focus:outline-2 focus:outline-gold'
 
-export default function AuditSetup({ audit, setAudit, scope, setScope }) {
+export default function AuditSetup({ audit, setAudit, scope, setScope, clauses, onStandardChange }) {
   const update = (key) => (e) => setAudit({ ...audit, [key]: e.target.value })
 
   const toggleMethod = (key) => {
@@ -81,15 +81,20 @@ export default function AuditSetup({ audit, setAudit, scope, setScope }) {
       <div className="bg-white border border-line rounded-md p-6 mb-5">
         <Field label="Audit Criteria">
           <div className="flex gap-2.5">
-            <div className="px-4 py-2 rounded-full text-sm border-[1.5px] bg-navy text-white border-navy">
-              ISO 45001:2018
-            </div>
-            <div className="px-4 py-2 rounded-full text-sm border-[1.5px] border-line opacity-40">
-              ISO 9001:2015 (Phase 2)
-            </div>
-            <div className="px-4 py-2 rounded-full text-sm border-[1.5px] border-line opacity-40">
-              ISO 14001:2015 (Phase 2)
-            </div>
+            {STANDARD_LIST.map((std) => (
+              <div
+                key={std.key}
+                onClick={() => onStandardChange(std.key)}
+                className={`px-4 py-2 rounded-full text-sm border-[1.5px] cursor-pointer ${
+                  audit.standard === std.key ? 'bg-navy text-white border-navy' : 'border-line bg-white hover:border-navy2'
+                }`}
+              >
+                {std.label}
+              </div>
+            ))}
+          </div>
+          <div className="text-[11px] text-inksoft italic mt-2">
+            Switching standards resets the clause scope and checklist for this audit to the new standard's clauses.
           </div>
         </Field>
 
@@ -152,7 +157,7 @@ export default function AuditSetup({ audit, setAudit, scope, setScope }) {
         <Field label="Audit Scope & Objectives">
           <textarea
             className={inputCls + ' min-h-[90px]'}
-            value={audit.scope_text || DEFAULT_SCOPE_TEXT}
+            value={audit.scope_text || defaultScopeText(audit.standard, getStandardInfo(audit.standard).system)}
             onChange={update('scope_text')}
           />
         </Field>
@@ -169,7 +174,7 @@ export default function AuditSetup({ audit, setAudit, scope, setScope }) {
         <div className="grid grid-cols-[70px_1fr_90px_1fr] gap-3 pb-2 border-b-2 border-line text-[11px] uppercase text-inksoft">
           <div>Clause</div><div>Title</div><div>Scope</div><div>Reason if excluded</div>
         </div>
-        {iso45001Clauses.map((c) => {
+        {clauses.map((c) => {
           const s = scope[c.clause_code]
           return (
             <div key={c.clause_code} className="grid grid-cols-[70px_1fr_90px_1fr] gap-3 items-start py-2.5 border-b border-line last:border-0">

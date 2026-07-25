@@ -79,7 +79,7 @@ export default function AuditList({ onOpen, onNew }) {
               <div>
                 <div className="font-display font-semibold text-[15px]">{a.client_name || 'Untitled Audit'}</div>
                 <div className="text-xs text-inksoft mt-0.5 font-mono">
-                  {a.department || 'No department'} • {a.audit_type} • {a.start_date || 'No date'}
+                  {a.standard || 'ISO 45001:2018'} • {a.department || 'No department'} • {a.audit_type} • {a.start_date || 'No date'}
                 </div>
               </div>
               <div className="flex items-center gap-3">

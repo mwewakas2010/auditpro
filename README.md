@@ -1,49 +1,55 @@
-# AuditPro — ISO Audit Management (Phase 1 MVP)
+# AuditPro — ISO Audit Management (Phase 2)
 
-Standalone app for SentinelPro Consultants. Phase 1 scope: single standard
-(ISO 45001:2018), single consultant login, no AI assistant yet — see the
-development plan for later phases.
+Standalone app for SentinelPro Consultants. Phase 2 adds ISO 9001:2015 and
+ISO 14001:2015 alongside ISO 45001:2018 — one standard per audit (not
+integrated/combined audits, by design decision). No AI assistant yet — see
+the development plan for later phases.
 
 ## What's built
 
 - **Login** — simple email/password auth (Supabase Auth). No public sign-up;
-  you create your own account in the Supabase dashboard (step 3 below).
-- **My Audits** — list of all saved audits, with status, open, and delete.
-  Click "+ New Audit" to start one.
-- **Audit Setup** — criteria selection, client/logo, department/process
-  owner/team, audit type (drives the classification scheme — see below),
-  dates, scope (prepopulated narrative, editable), clause in/out-of-scope
-  toggles with required exclusion reasons, methodology (prepopulated
-  narrative, editable), sampling disclaimer & confidentiality statement
-  (editable defaults), and discontinuation conditions (internal-only — never
-  shown in the report unless the audit is actually marked discontinued).
-- **Checklist** — all 27 ISO 45001:2018 clauses, with a classification scheme
-  that automatically adapts to audit type:
+  you create your own account in the Supabase dashboard.
+- **My Audits** — list of all saved audits (now showing which standard each
+  is against), with status, open/edit, and delete.
+- **Audit Setup** — choose the audit criteria (ISO 45001:2018, ISO 9001:2015,
+  or ISO 14001:2015 — click to select, single-select). Switching standards
+  on an audit that already has checklist data prompts for confirmation and
+  resets the checklist/scope to the new standard's clauses. Client/logo,
+  department/process owner/team, audit type (drives the classification
+  scheme — see below), dates, scope (prepopulated narrative that adapts to
+  the selected standard, editable), clause in/out-of-scope toggles with
+  required exclusion reasons, methodology (prepopulated narrative, editable),
+  sampling disclaimer & confidentiality statement (editable defaults), and
+  discontinuation conditions (internal-only — never shown in the report
+  unless the audit is actually marked discontinued).
+- **Checklist** — full clause set for whichever standard is selected, with a
+  classification scheme that automatically adapts to audit type:
   - Internal / Second-party → Conforming, Nonconforming, OFI, N/A
   - Stage 1 (Recommendation) / Stage 2 (Certification) → Conforming, Minor
     NC, Major NC, OFI, N/A
   - Real camera capture (`getUserMedia`) and real file upload, with actual
     image thumbnails.
 - **Findings** — auto-derived register, live counts by classification.
-- **Conclusion & Sign-off** — suitability/adequacy/effectiveness conclusion,
-  click-to-sign, and a full PDF export: cover with embedded client logo,
-  scope/methodology/statements, executive summary, process verification
-  statement, nonconformance findings, full clause-by-clause results
-  (including conformances), conclusion & sign-off, and a final photo
+- **Conclusion & Sign-off** — suitability/adequacy/effectiveness conclusion
+  (wording adapts to the audited standard), click-to-sign, and a full PDF
+  export: cover with embedded client logo and the correct standard/system
+  name, scope/methodology/statements, executive summary, process
+  verification statement, nonconformance findings, full clause-by-clause
+  results (including conformances), conclusion & sign-off, and a final photo
   evidence appendix grouped by clause.
-- **Persistence** — audits, scope, checklist entries, evidence files, and
-  sign-offs all save to and load from Supabase. Evidence photos and the
-  client logo are uploaded to Supabase Storage (not stored as base64 in the
-  database).
+- **Persistence** — audits (including which standard), scope, checklist
+  entries, evidence files, and sign-offs all save to and load from
+  Supabase. Evidence photos and the client logo are uploaded to Supabase
+  Storage (not stored as base64 in the database).
 
-## What's still stubbed for Phase 1
+## What's still stubbed
 
 - **Word (.docx) export** — button is present, not yet implemented.
 - **AI assistant / drafting help / report review / help chatbot** — Phase 3.
 - **Closing meeting PPT generation** — Phase 3/4.
-- **Autosave** — you need to click "Save Audit" explicitly; there's no
-  autosave or offline queue yet (that's part of the later mobile/offline
-  phase).
+- **Autosave** — you need to click "Save Audit" explicitly.
+- **Integrated/combined audits** (multiple standards in one audit) — by
+  design decision, not planned; one standard per audit.
 
 ## Getting started locally
 

@@ -58,8 +58,9 @@ export const DISCONTINUATION_CONDITIONS = [
   { key: 'force_majeure', text: "Circumstances beyond the audit team's control prevent completion (e.g. site emergency, force majeure)" },
 ]
 
-export const DEFAULT_SCOPE_TEXT =
-  "This audit was conducted to determine the conformity of the audited department/section's occupational health and safety management system with the requirements of ISO 45001:2018, and to evaluate the extent to which the system has been effectively implemented and is being maintained.\n\nThe objective of the audit is to provide an independent, evidence-based assessment of the management system's suitability, adequacy and effectiveness within the defined scope, and to identify any nonconformances, risks or opportunities for improvement that require management attention."
+export function defaultScopeText(standardLabel, systemName) {
+  return `This audit was conducted to determine the conformity of the audited department/section's ${systemName.toLowerCase()} with the requirements of ${standardLabel}, and to evaluate the extent to which the system has been effectively implemented and is being maintained.\n\nThe objective of the audit is to provide an independent, evidence-based assessment of the management system's suitability, adequacy and effectiveness within the defined scope, and to identify any nonconformances, risks or opportunities for improvement that require management attention.`
+}
 
 export const DEFAULT_METHODOLOGY_NARRATIVE =
   "This audit was conducted using a combination of interviews with relevant personnel, desktop review of documented information and records, and field visits to observe work activities and conditions directly. Interviews were used to verify workers' and management's understanding and implementation of the management system; document review was used to confirm the existence, adequacy and currency of required documented information; and field visits were used to observe actual working conditions, practices and controls in place at the time of the audit."

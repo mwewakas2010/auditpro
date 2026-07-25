@@ -1,24 +1,28 @@
 import { generateAuditPdf } from '../utils/pdfExport'
+import { getStandardInfo } from '../data/standards'
 
-const CONCLUSIONS = [
-  {
-    key: 'suitable_effective',
-    title: 'System is suitable, adequate and effective',
-    desc: 'No major NCs; minor NCs (if any) do not undermine the system\u2019s ability to meet OHS policy and objectives.',
-  },
-  {
-    key: 'adequate_not_effective',
-    title: 'System is adequate but not fully effective',
-    desc: 'Design meets the standard\u2019s intent, but implementation gaps limit effectiveness — minor NCs present, follow-up required.',
-  },
-  {
-    key: 'not_suitable',
-    title: 'System is not suitable / not adequate',
-    desc: 'One or more Major NCs indicate the system cannot currently ensure conformity — recommend re-audit after corrective action.',
-  },
-]
+function conclusionOptions(policyName) {
+  return [
+    {
+      key: 'suitable_effective',
+      title: 'System is suitable, adequate and effective',
+      desc: `No major NCs; minor NCs (if any) do not undermine the system's ability to meet ${policyName} policy and objectives.`,
+    },
+    {
+      key: 'adequate_not_effective',
+      title: 'System is adequate but not fully effective',
+      desc: 'Design meets the standard\u2019s intent, but implementation gaps limit effectiveness — minor NCs present, follow-up required.',
+    },
+    {
+      key: 'not_suitable',
+      title: 'System is not suitable / not adequate',
+      desc: 'One or more Major NCs indicate the system cannot currently ensure conformity — recommend re-audit after corrective action.',
+    },
+  ]
+}
 
-export default function ReportSignoff({ audit, setAudit, signoffs, setSignoffs, checklist, scope }) {
+export default function ReportSignoff({ audit, setAudit, signoffs, setSignoffs, checklist, scope, clauses }) {
+  const CONCLUSIONS = conclusionOptions(getStandardInfo(audit.standard).system.replace(' Management System', '').toLowerCase())
   const sign = (role, name) => {
     setSignoffs({ ...signoffs, [role]: { name, date: new Date().toLocaleDateString() } })
   }
@@ -29,7 +33,7 @@ export default function ReportSignoff({ audit, setAudit, signoffs, setSignoffs, 
         Audit Conclusion & Sign-off
       </h2>
       <div className="text-[12.5px] text-inksoft mb-5">
-        Based on ISO 45001:2018 — is the management system suitable, adequate and effective?
+        Based on {audit.standard} — is the management system suitable, adequate and effective?
       </div>
 
       <div className="bg-white border border-line rounded-md p-6 mb-5">
@@ -85,7 +89,7 @@ export default function ReportSignoff({ audit, setAudit, signoffs, setSignoffs, 
       <div className="flex gap-3">
         <button
           className="bg-navy text-white px-5.5 py-2.5 rounded font-medium text-[13.5px]"
-          onClick={async () => await generateAuditPdf({ audit, signoffs, checklist, scope })}
+          onClick={async () => await generateAuditPdf({ audit, signoffs, checklist, scope, clauses })}
         >
           Export Draft PDF
         </button>

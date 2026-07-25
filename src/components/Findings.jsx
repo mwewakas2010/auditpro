@@ -1,4 +1,3 @@
-import { iso45001Clauses } from '../data/iso45001Clauses'
 import { badgeInfo } from '../data/schemes'
 
 const badgeCls = {
@@ -8,14 +7,14 @@ const badgeCls = {
   na: 'bg-nabg text-na',
 }
 
-export default function Findings({ scheme, checklist }) {
-  const rows = iso45001Clauses.filter((c) => {
+export default function Findings({ scheme, checklist, clauses }) {
+  const rows = clauses.filter((c) => {
     const s = checklist[c.clause_code].status
     return s && s !== 'conform' && s !== 'na'
   })
 
   const counts = { major: 0, minor: 0, nc: 0, ofi: 0, conform: 0, na: 0 }
-  iso45001Clauses.forEach((c) => {
+  clauses.forEach((c) => {
     const s = checklist[c.clause_code].status
     if (s && counts[s] !== undefined) counts[s]++
   })

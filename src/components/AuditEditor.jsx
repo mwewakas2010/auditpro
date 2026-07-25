@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { iso45001Clauses } from '../data/iso45001Clauses'
+import { getClauses, getStandardInfo } from '../data/standards'
 import { schemeForAuditType } from '../data/schemes'
 import { loadAudit, saveAudit } from '../lib/auditRepo'
 import AuditSetup from './AuditSetup.jsx'
@@ -18,6 +18,7 @@ function emptyAudit() {
   return {
     client_name: '',
     logo_url: null,
+    standard: 'ISO 45001:2018',
     department: '',
     process_owner: '',
     other_participants: '',
@@ -40,17 +41,17 @@ function emptyAudit() {
   }
 }
 
-function emptyScope() {
+function emptyScopeFor(clauses) {
   const scope = {}
-  iso45001Clauses.forEach((c) => {
+  clauses.forEach((c) => {
     scope[c.clause_code] = { inScope: true, exclusionReason: '' }
   })
   return scope
 }
 
-function emptyChecklist() {
+function emptyChecklistFor(clauses) {
   const entries = {}
-  iso45001Clauses.forEach((c) => {
+  clauses.forEach((c) => {
     entries[c.clause_code] = {
       status: null,
       evidenceText: '',
@@ -66,13 +67,28 @@ export default function AuditEditor({ auditId, onBack }) {
   const [id, setId] = useState(auditId) // becomes set once a new audit is first saved
   const [activeTab, setActiveTab] = useState('setup')
   const [audit, setAudit] = useState(emptyAudit)
-  const [scope, setScope] = useState(emptyScope)
-  const [checklist, setChecklist] = useState(emptyChecklist)
+  const [scope, setScope] = useState(() => emptyScopeFor(getClauses(emptyAudit().standard)))
+  const [checklist, setChecklist] = useState(() => emptyChecklistFor(getClauses(emptyAudit().standard)))
   const [signoffs, setSignoffs] = useState({ lead_auditor: null, auditee_rep: null })
   const [loading, setLoading] = useState(!!auditId)
   const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
+
+  const clauses = useMemo(() => getClauses(audit.standard), [audit.standard])
+  const standardInfo = useMemo(() => getStandardInfo(audit.standard), [audit.standard])
+
+  const handleStandardChange = (newStandard) => {
+    if (newStandard === audit.standard) return
+    const hasData = Object.values(checklist).some((c) => c.status || c.evidenceText || c.thumbs.length)
+    if (hasData && !confirm('Switching standards will reset the clause scope and checklist for this audit. Continue?')) {
+      return
+    }
+    const newClauses = getClauses(newStandard)
+    setAudit({ ...audit, standard: newStandard })
+    setScope(emptyScopeFor(newClauses))
+    setChecklist(emptyChecklistFor(newClauses))
+  }
 
   useEffect(() => {
     if (!auditId) return
@@ -163,9 +179,9 @@ export default function AuditEditor({ auditId, onBack }) {
             ← My Audits
           </button>
           <div className="text-[11.5px] text-[#8493A8]">
-            ISO 45001:2018
+            {audit.standard}
             <br />
-            Phase 1 — MVP
+            Phase 2
           </div>
         </div>
       </div>
@@ -187,12 +203,12 @@ export default function AuditEditor({ auditId, onBack }) {
           <div className="flex items-center gap-4">
             <div className="text-right">
               <div className="font-mono text-[11.5px] text-inksoft">
-                {completedCount} of {iso45001Clauses.length} clauses complete
+                {completedCount} of {clauses.length} clauses complete
               </div>
               <div className="w-40 h-1.5 bg-line rounded-full overflow-hidden mt-1">
                 <div
                   className="h-full bg-gold"
-                  style={{ width: `${(completedCount / iso45001Clauses.length) * 100}%` }}
+                  style={{ width: `${(completedCount / clauses.length) * 100}%` }}
                 />
               </div>
             </div>
@@ -213,12 +229,26 @@ export default function AuditEditor({ auditId, onBack }) {
 
         <div className="p-9 overflow-y-auto flex-1">
           {activeTab === 'setup' && (
-            <AuditSetup audit={audit} setAudit={setAudit} scope={scope} setScope={setScope} />
+            <AuditSetup
+              audit={audit}
+              setAudit={setAudit}
+              scope={scope}
+              setScope={setScope}
+              clauses={clauses}
+              onStandardChange={handleStandardChange}
+            />
           )}
           {activeTab === 'checklist' && (
-            <Checklist scheme={scheme} auditType={audit.audit_type} checklist={checklist} setChecklist={setChecklist} />
+            <Checklist
+              scheme={scheme}
+              auditType={audit.audit_type}
+              checklist={checklist}
+              setChecklist={setChecklist}
+              clauses={clauses}
+              standardLabel={standardInfo.label}
+            />
           )}
-          {activeTab === 'findings' && <Findings scheme={scheme} checklist={checklist} />}
+          {activeTab === 'findings' && <Findings scheme={scheme} checklist={checklist} clauses={clauses} />}
           {activeTab === 'report' && (
             <ReportSignoff
               audit={audit}
@@ -227,6 +257,7 @@ export default function AuditEditor({ auditId, onBack }) {
               setSignoffs={setSignoffs}
               checklist={checklist}
               scope={scope}
+              clauses={clauses}
             />
           )}
         </div>

@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react'
-import { iso45001Clauses } from '../data/iso45001Clauses'
 import { schemes } from '../data/schemes'
 import CameraCapture from './CameraCapture.jsx'
 
@@ -17,7 +16,7 @@ const statusBtnActive = {
   na: 'bg-nabg border-na text-na',
 }
 
-export default function Checklist({ scheme, checklist, setChecklist }) {
+export default function Checklist({ scheme, checklist, setChecklist, clauses, standardLabel }) {
   const statuses = schemes[scheme]
   const [cameraOpenFor, setCameraOpenFor] = useState(null)
   const fileInputs = useRef({})
@@ -56,14 +55,14 @@ export default function Checklist({ scheme, checklist, setChecklist }) {
   return (
     <div>
       <h2 className="font-display text-[17px] font-semibold text-navy mb-1">
-        Checklist — ISO 45001:2018
+        Checklist — {standardLabel}
       </h2>
       <div className="text-[12.5px] text-inksoft mb-1">
         Mark each requirement, attach evidence, capture photos in the field.
       </div>
       <div className="text-[11.5px] text-inksoft italic mb-5">{schemeNotes[scheme]}</div>
 
-      {iso45001Clauses.map((c) => {
+      {clauses.map((c) => {
         const entry = checklist[c.clause_code]
         return (
           <div

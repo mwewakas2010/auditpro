@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient'
-import { iso45001Clauses } from '../data/iso45001Clauses'
+import { getClauses } from '../data/standards'
 
 // ---------- Storage ----------
 
@@ -21,7 +21,7 @@ export async function uploadDataUrl(bucket, path, dataUrl) {
 export async function listAudits() {
   const { data, error } = await supabase
     .from('audits')
-    .select('id, client_name, department, audit_type, start_date, status, updated_at')
+    .select('id, client_name, department, standard, audit_type, start_date, status, updated_at')
     .order('updated_at', { ascending: false })
   if (error) throw error
   return data
@@ -64,6 +64,7 @@ export async function loadAudit(auditId) {
     id: auditRow.id,
     client_name: auditRow.client_name || '',
     logo_url: auditRow.logo_url || null,
+    standard: auditRow.standard || 'ISO 45001:2018',
     department: auditRow.department || '',
     process_owner: auditRow.process_owner || '',
     other_participants: auditRow.other_participants || '',
@@ -85,8 +86,10 @@ export async function loadAudit(auditId) {
     status: auditRow.status || 'in_progress',
   }
 
+  const clauses = getClauses(audit.standard)
+
   const scope = {}
-  iso45001Clauses.forEach((c) => {
+  clauses.forEach((c) => {
     const row = scopeRows.find((r) => r.clause_code === c.clause_code)
     scope[c.clause_code] = row
       ? { inScope: row.in_scope, exclusionReason: row.exclusion_reason || '' }
@@ -94,7 +97,7 @@ export async function loadAudit(auditId) {
   })
 
   const checklist = {}
-  iso45001Clauses.forEach((c) => {
+  clauses.forEach((c) => {
     const row = entryRows.find((r) => r.clause_code === c.clause_code)
     checklist[c.clause_code] = row
       ? {
@@ -132,6 +135,7 @@ export async function saveAudit({ auditId, audit, scope, checklist, signoffs }) 
     owner,
     client_name: audit.client_name,
     logo_url: audit.logo_url,
+    standard: audit.standard,
     audit_type: audit.audit_type,
     department: audit.department,
     process_owner: audit.process_owner,

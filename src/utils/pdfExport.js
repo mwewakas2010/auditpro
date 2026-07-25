@@ -1,12 +1,15 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { iso45001Clauses } from '../data/iso45001Clauses'
-import { badgeInfo, DEFAULT_SCOPE_TEXT, DEFAULT_METHODOLOGY_NARRATIVE, PROCESS_VERIFICATION_STATEMENT, DEFAULT_SAMPLING_DISCLAIMER, DEFAULT_CONFIDENTIALITY_STATEMENT } from '../data/schemes'
+import { getStandardInfo } from '../data/standards'
+import { badgeInfo, defaultScopeText, DEFAULT_METHODOLOGY_NARRATIVE, PROCESS_VERIFICATION_STATEMENT, DEFAULT_SAMPLING_DISCLAIMER, DEFAULT_CONFIDENTIALITY_STATEMENT } from '../data/schemes'
 
-const CONCLUSION_TEXT = {
-  suitable_effective: 'The OH&S management system is suitable, adequate and effective for the scope audited.',
-  adequate_not_effective: 'The OH&S management system is adequate but not fully effective for the scope audited.',
-  not_suitable: 'The OH&S management system is not suitable / not adequate for the scope audited.',
+function conclusionText(conclusion, systemName) {
+  const map = {
+    suitable_effective: `The ${systemName} is suitable, adequate and effective for the scope audited.`,
+    adequate_not_effective: `The ${systemName} is adequate but not fully effective for the scope audited.`,
+    not_suitable: `The ${systemName} is not suitable / not adequate for the scope audited.`,
+  }
+  return map[conclusion] || '—'
 }
 
 const NAVY = [22, 37, 61]
@@ -86,7 +89,7 @@ function imageFormat(src) {
   return 'JPEG'
 }
 
-function footer(doc) {
+function footer(doc, standardLabel) {
   const pageCount = doc.internal.getNumberOfPages()
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i)
@@ -95,7 +98,7 @@ function footer(doc) {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
     doc.setTextColor(...INK_SOFT)
-    doc.text('SentinelPro Consultants — ISO 45001:2018 Audit Report', MARGIN, PAGE_H - 9)
+    doc.text(`SentinelPro Consultants — ${standardLabel} Audit Report`, MARGIN, PAGE_H - 9)
     doc.text(`Page ${i} of ${pageCount}`, PAGE_W - MARGIN, PAGE_H - 9, { align: 'right' })
   }
 }
@@ -179,7 +182,8 @@ async function addPhotoAppendix(doc, scopedClauses, checklist) {
   }
 }
 
-export async function generateAuditPdf({ audit, signoffs, checklist, scope }) {
+export async function generateAuditPdf({ audit, signoffs, checklist, scope, clauses }) {
+  const standardInfo = getStandardInfo(audit.standard)
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
 
   // ================= COVER PAGE =================
@@ -206,11 +210,12 @@ export async function generateAuditPdf({ audit, signoffs, checklist, scope }) {
   doc.setTextColor(255, 255, 255)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(19)
-  doc.text('OH&S Management System', MARGIN, 26)
-  doc.text('Audit Report', MARGIN, 36)
+  const titleLines = doc.splitTextToSize(standardInfo.system, 130)
+  doc.text(titleLines, MARGIN, 26)
+  doc.text('Audit Report', MARGIN, 26 + titleLines.length * 8)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(10.5)
-  doc.text('ISO 45001:2018', MARGIN, 45)
+  doc.text(standardInfo.label, MARGIN, 26 + titleLines.length * 8 + 9)
 
   let y = 68
   doc.setFont('helvetica', 'bold')
@@ -248,7 +253,7 @@ export async function generateAuditPdf({ audit, signoffs, checklist, scope }) {
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9.5)
   doc.setTextColor(...INK)
-  let lines = doc.splitTextToSize(audit.scope_text || DEFAULT_SCOPE_TEXT, CONTENT_W)
+  let lines = doc.splitTextToSize(audit.scope_text || defaultScopeText(standardInfo.label, standardInfo.system), CONTENT_W)
   doc.text(lines, MARGIN, y)
   y += lines.length * 4.3 + 6
 
@@ -312,11 +317,11 @@ export async function generateAuditPdf({ audit, signoffs, checklist, scope }) {
   y = sectionHeader(doc, 'Executive Summary', y)
 
   const counts = { conform: 0, major: 0, minor: 0, nc: 0, ofi: 0, na: 0 }
-  iso45001Clauses.forEach((c) => {
+  clauses.forEach((c) => {
     const s = checklist[c.clause_code]?.status
     if (s && counts[s] !== undefined) counts[s]++
   })
-  const isSimpleScheme = iso45001Clauses.some((c) => checklist[c.clause_code]?.status === 'nc')
+  const isSimpleScheme = clauses.some((c) => checklist[c.clause_code]?.status === 'nc')
   const summaryBody = isSimpleScheme
     ? [['Conforming', String(counts.conform)], ['Nonconforming', String(counts.nc)], ['OFI', String(counts.ofi)], ['N/A', String(counts.na)]]
     : [['Conforming', String(counts.conform)], ['Major NC', String(counts.major)], ['Minor NC', String(counts.minor)], ['OFI', String(counts.ofi)], ['N/A', String(counts.na)]]
@@ -341,7 +346,7 @@ export async function generateAuditPdf({ audit, signoffs, checklist, scope }) {
 
   // Nonconformances, presented in findings format — just before the full clause-by-clause table
   y = sectionHeader(doc, 'Findings — Nonconformances', y)
-  const allScopedClauses = iso45001Clauses.filter((c) => scope?.[c.clause_code]?.inScope !== false)
+  const allScopedClauses = clauses.filter((c) => scope?.[c.clause_code]?.inScope !== false)
   const ncRows = allScopedClauses.filter((c) => ['nc', 'minor', 'major'].includes(checklist[c.clause_code]?.status))
 
   if (!ncRows.length) {
@@ -397,7 +402,7 @@ export async function generateAuditPdf({ audit, signoffs, checklist, scope }) {
   sectionHeader(doc, 'Clause-by-Clause Audit Results', y)
   y += 2
 
-  const scopedClauses = iso45001Clauses.filter((c) => scope?.[c.clause_code]?.inScope !== false)
+  const scopedClauses = clauses.filter((c) => scope?.[c.clause_code]?.inScope !== false)
   const tableBody = scopedClauses.map((c) => {
     const entry = checklist[c.clause_code] || {}
     const b = badgeInfo(entry.status || 'na')
@@ -448,7 +453,7 @@ export async function generateAuditPdf({ audit, signoffs, checklist, scope }) {
   y = sectionHeader(doc, 'Audit Conclusion', y)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(10)
-  lines = doc.splitTextToSize(CONCLUSION_TEXT[audit.conclusion] || '—', CONTENT_W)
+  lines = doc.splitTextToSize(conclusionText(audit.conclusion, standardInfo.system.replace('Management System', 'management system')), CONTENT_W)
   doc.text(lines, MARGIN, y)
   y += lines.length * 4.6 + 10
 
@@ -467,6 +472,7 @@ export async function generateAuditPdf({ audit, signoffs, checklist, scope }) {
 
   await addPhotoAppendix(doc, allScopedClauses, checklist)
 
-  footer(doc)
-  doc.save(`${(audit.client_name || 'audit').replace(/\s+/g, '_')}_ISO45001_Report_${audit.status === 'final' ? 'FINAL' : 'DRAFT'}.pdf`)
+  footer(doc, standardInfo.label)
+  const standardSlug = audit.standard.replace(/[^A-Za-z0-9]+/g, '')
+  doc.save(`${(audit.client_name || 'audit').replace(/\s+/g, '_')}_${standardSlug}_Report_${audit.status === 'final' ? 'FINAL' : 'DRAFT'}.pdf`)
 }
