@@ -1,24 +1,41 @@
-# AuditPro — ISO Audit Management (Phase 3 — AI Drafting Assistant)
+# AuditPro — ISO Audit Management (Phase 3 — AI Drafting + Report Review)
 
-Standalone app for SentinelPro Consultants. Phase 3 (in progress) adds the
-AI drafting assistant first — helps rewrite checklist evidence notes into
-clear, objective, unambiguous audit language. Report review and the help
-chatbot are still to come in this phase.
+Standalone app for SentinelPro Consultants. Phase 3 (in progress) has the AI
+drafting assistant and AI report reviewer built. The in-app help chatbot is
+still to come.
 
-## New in this pass: AI Drafting Assistant
+## New in this pass: AI Report Reviewer
 
-- Each clause's "Evidence / Observation" box now has an **"✨ Improve
-  Wording"** button.
-- It sends your draft note (plus the clause code, title, requirement text,
-  and current classification) to Claude via a secure server-side function —
-  your Anthropic API key never reaches the browser.
-- Claude rewrites it into clear, objective ISO 19011-style audit language
-  **without inventing any new facts** — it only rephrases what you already
-  wrote.
-- The rewrite appears as a suggestion with **"Use this"** / **"Discard"** —
-  it never overwrites your text automatically.
+- On the Conclusion & Sign-off tab, there's now an **"🔍 Review Report"**
+  button.
+- It sends all of the audit's nonconformities and OFIs (clause,
+  classification, evidence note, evidence-available flag, follow-up flag),
+  plus your draft conclusion, to the same OpenRouter free-model backend.
+- It checks for:
+  1. Nonconformities with no evidence note, or evidence marked unavailable
+     with no explanation.
+  2. Vague/subjective language ("seems fine", "generally okay") instead of
+     objective observation.
+  3. Contradictions — e.g. conclusion says "suitable and effective" while a
+     Major NC exists.
+  4. Nonconformities that probably should be flagged for field follow-up but
+     aren't.
+  5. Thin evidence on OFIs.
+- Issues are shown as a color-coded list (high/medium/low), or a clear "no
+  issues found" message if the checklist looks consistent.
+- This is a **helper check, not a gate** — it doesn't block "Mark as Final";
+  it's there to catch things before you commit to sending the report out.
+- Uses the same `OPENROUTER_API_KEY` env var as the drafting assistant — no
+  extra setup needed if that's already configured.
 
-### Setting up the API key (required for this feature to work)
+## New in the previous pass: AI Drafting Assistant
+
+- Each clause's "Evidence / Observation" box has an **"✨ Improve Wording"**
+  button. It sends your draft note (plus clause context) to Claude via a
+  secure server-side function and suggests a clearer, more objective
+  rewrite — you choose "Use this" or "Discard", nothing auto-overwrites.
+
+### Setting up the API key (required for both AI features)
 
 Uses **OpenRouter** (same provider as MineClosure360's AI assistant), routed
 to its free-model tier — no cost.
@@ -95,7 +112,7 @@ after deploying.
 ## What's still stubbed
 
 - **Word (.docx) export** — button is present, not yet implemented.
-- **AI report review** and **AI help chatbot** — rest of Phase 3, not yet built.
+- **AI help chatbot** — last piece of Phase 3, not yet built.
 - **Closing meeting PPT generation** — Phase 3/4.
 - **Autosave** — you need to click "Save Audit" explicitly.
 - **Integrated/combined audits** (multiple standards in one audit) — by
