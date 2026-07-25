@@ -20,9 +20,43 @@ export default function Checklist({ scheme, checklist, setChecklist, clauses, st
   const statuses = schemes[scheme]
   const [cameraOpenFor, setCameraOpenFor] = useState(null)
   const fileInputs = useRef({})
+  const [aiState, setAiState] = useState({})
 
   const updateEntry = (code, patch) => {
     setChecklist({ ...checklist, [code]: { ...checklist[code], ...patch } })
+  }
+
+  const requestImprovement = async (clause) => {
+    const code = clause.clause_code
+    const entry = checklist[code]
+    setAiState((prev) => ({ ...prev, [code]: { loading: true, suggestion: null, error: null } }))
+    try {
+      const res = await fetch('/api/ai-assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clauseCode: clause.clause_code,
+          clauseTitle: clause.title,
+          requirementText: clause.requirement_text,
+          status: entry.status,
+          draftText: entry.evidenceText,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Request failed')
+      setAiState((prev) => ({ ...prev, [code]: { loading: false, suggestion: data.text, error: null } }))
+    } catch (err) {
+      setAiState((prev) => ({ ...prev, [code]: { loading: false, suggestion: null, error: err.message } }))
+    }
+  }
+
+  const acceptSuggestion = (code) => {
+    updateEntry(code, { evidenceText: aiState[code].suggestion })
+    setAiState((prev) => ({ ...prev, [code]: { loading: false, suggestion: null, error: null } }))
+  }
+
+  const discardSuggestion = (code) => {
+    setAiState((prev) => ({ ...prev, [code]: { loading: false, suggestion: null, error: null } }))
   }
 
   const addThumb = (code, thumb) => {
@@ -99,15 +133,51 @@ export default function Checklist({ scheme, checklist, setChecklist, clauses, st
 
               <div className="grid grid-cols-[1fr_220px] gap-4">
                 <div>
-                  <label className="block text-[11.5px] font-semibold text-navy2 mb-1.5 uppercase tracking-wide">
-                    Evidence / Observation
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11.5px] font-semibold text-navy2 uppercase tracking-wide">
+                      Evidence / Observation
+                    </label>
+                    <button
+                      onClick={() => requestImprovement(c)}
+                      disabled={!entry.evidenceText?.trim() || aiState[c.clause_code]?.loading}
+                      className="text-[11px] px-2 py-1 border border-gold text-gold rounded hover:bg-goldsoft disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      {aiState[c.clause_code]?.loading ? '✨ Thinking…' : '✨ Improve Wording'}
+                    </button>
+                  </div>
                   <textarea
                     className="w-full px-2.5 py-2 border border-line rounded text-[13.5px] bg-[#FCFBF8] min-h-[56px]"
                     placeholder="Describe what was observed, documents sighted, interviews conducted..."
                     value={entry.evidenceText}
                     onChange={(e) => updateEntry(c.clause_code, { evidenceText: e.target.value })}
                   />
+                  {aiState[c.clause_code]?.error && (
+                    <div className="text-[11.5px] text-major bg-majorbg border border-major rounded p-2 mt-2">
+                      {aiState[c.clause_code].error}
+                    </div>
+                  )}
+                  {aiState[c.clause_code]?.suggestion && (
+                    <div className="border border-gold bg-goldsoft/40 rounded p-2.5 mt-2">
+                      <div className="text-[10.5px] font-semibold text-navy2 uppercase tracking-wide mb-1">
+                        Suggested rewrite
+                      </div>
+                      <div className="text-[13px] text-ink mb-2">{aiState[c.clause_code].suggestion}</div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => acceptSuggestion(c.clause_code)}
+                          className="text-[11px] px-2.5 py-1 bg-navy text-white rounded"
+                        >
+                          Use this
+                        </button>
+                        <button
+                          onClick={() => discardSuggestion(c.clause_code)}
+                          className="text-[11px] px-2.5 py-1 border border-line rounded"
+                        >
+                          Discard
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <label className="flex items-center gap-1.5 text-xs text-inksoft mt-2.5">
                     <input
                       type="checkbox"

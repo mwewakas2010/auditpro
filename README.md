@@ -1,11 +1,61 @@
-# AuditPro — ISO Audit Management (Phase 2)
+# AuditPro — ISO Audit Management (Phase 3 — AI Drafting Assistant)
 
-Standalone app for SentinelPro Consultants. Phase 2 adds ISO 9001:2015 and
-ISO 14001:2015 alongside ISO 45001:2018 — one standard per audit (not
-integrated/combined audits, by design decision). No AI assistant yet — see
-the development plan for later phases.
+Standalone app for SentinelPro Consultants. Phase 3 (in progress) adds the
+AI drafting assistant first — helps rewrite checklist evidence notes into
+clear, objective, unambiguous audit language. Report review and the help
+chatbot are still to come in this phase.
 
-## What's built
+## New in this pass: AI Drafting Assistant
+
+- Each clause's "Evidence / Observation" box now has an **"✨ Improve
+  Wording"** button.
+- It sends your draft note (plus the clause code, title, requirement text,
+  and current classification) to Claude via a secure server-side function —
+  your Anthropic API key never reaches the browser.
+- Claude rewrites it into clear, objective ISO 19011-style audit language
+  **without inventing any new facts** — it only rephrases what you already
+  wrote.
+- The rewrite appears as a suggestion with **"Use this"** / **"Discard"** —
+  it never overwrites your text automatically.
+
+### Setting up the API key (required for this feature to work)
+
+Uses **OpenRouter** (same provider as MineClosure360's AI assistant), routed
+to its free-model tier — no cost.
+
+1. Go to **openrouter.ai**, sign up (no credit card required for free
+   models).
+2. Go to **Keys** → **Create Key**, copy it (starts with `sk-or-...`).
+3. In your **Vercel** project → **Settings** → **Environment Variables**,
+   add:
+   - Key: `OPENROUTER_API_KEY`
+   - Value: the key you just copied
+   (No `VITE_` prefix — it must stay server-side only, never exposed to the
+   browser.)
+4. Redeploy (Vercel → Deployments → ⋯ → Redeploy, or just push a commit).
+
+The backend uses `openrouter/free`, OpenRouter's own auto-router that always
+points at whatever free model is currently available — this matters because
+specific free models (Llama, DeepSeek, etc.) rotate in and out without
+notice. If you'd rather pin a specific model, edit `api/ai-assist.js` and
+check **openrouter.ai/models** for current free-tier availability first.
+
+Free tier rate limits (as of mid-2026): roughly 20 requests/minute and
+50–1000 requests/day depending on whether you've ever added at least $10 in
+OpenRouter credits (raises the daily cap even if you keep using free
+models). Fine for solo consultant use; if you hit limits, adding a small
+amount of credit removes the daily cap without forcing you onto paid models.
+
+### Important: this feature only works once deployed to Vercel
+
+The "Improve Wording" button calls `/api/ai-assist`, a **Vercel serverless
+function**. Plain `npm run dev` (Vite) does not run serverless functions, so
+this button will fail locally with a 404 unless you install the Vercel CLI
+and run `vercel dev` instead. Simplest path: build/test other features
+locally as usual, but test this specific feature on the live Vercel URL
+after deploying.
+
+## What's built (from Phase 1 & 2)
 
 - **Login** — simple email/password auth (Supabase Auth). No public sign-up;
   you create your own account in the Supabase dashboard.
@@ -45,7 +95,7 @@ the development plan for later phases.
 ## What's still stubbed
 
 - **Word (.docx) export** — button is present, not yet implemented.
-- **AI assistant / drafting help / report review / help chatbot** — Phase 3.
+- **AI report review** and **AI help chatbot** — rest of Phase 3, not yet built.
 - **Closing meeting PPT generation** — Phase 3/4.
 - **Autosave** — you need to click "Save Audit" explicitly.
 - **Integrated/combined audits** (multiple standards in one audit) — by
