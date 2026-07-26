@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabaseClient'
 import Login from './components/Login.jsx'
-import AuditList from './components/AuditList.jsx'
-import AuditEditor from './components/AuditEditor.jsx'
-import Companies from './components/Companies.jsx'
+import Shell from './components/Shell.jsx'
 
 export default function App() {
   const [session, setSession] = useState(undefined) // undefined = still checking
-  const [view, setView] = useState({ name: 'list' }) // { name: 'list' } | { name: 'editor', auditId } | { name: 'companies' }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
@@ -24,19 +21,5 @@ export default function App() {
     return <Login />
   }
 
-  if (view.name === 'editor') {
-    return <AuditEditor auditId={view.auditId} onBack={() => setView({ name: 'list' })} />
-  }
-
-  if (view.name === 'companies') {
-    return <Companies onBack={() => setView({ name: 'list' })} />
-  }
-
-  return (
-    <AuditList
-      onOpen={(auditId) => setView({ name: 'editor', auditId })}
-      onNew={() => setView({ name: 'editor', auditId: null })}
-      onManageCompanies={() => setView({ name: 'companies' })}
-    />
-  )
+  return <Shell />
 }

@@ -12,7 +12,7 @@ import {
 } from '../lib/companyRepo'
 import { generateConsolidatedReport } from '../utils/consolidatedReport'
 
-export default function Companies({ onBack }) {
+export default function Companies() {
   const [companies, setCompanies] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -146,20 +146,8 @@ export default function Companies({ onBack }) {
   }
 
   return (
-    <div className="min-h-screen bg-paper">
-      <div className="bg-navy text-white px-8 py-5 flex justify-between items-center">
-        <div>
-          <div className="font-display text-xl font-bold">AuditPro</div>
-          <div className="text-[10.5px] font-mono text-[#9FB0C9] uppercase tracking-wide mt-0.5">
-            SentinelPro Consultants
-          </div>
-        </div>
-        <button onClick={onBack} className="text-xs border border-white/30 px-3 py-1.5 rounded hover:bg-white/10">
-          ← My Audits
-        </button>
-      </div>
-
-      <div className="max-w-3xl mx-auto p-8">
+    <div className="p-9">
+      <div className="max-w-3xl">
         <div className="flex justify-between items-center mb-5">
           <h1 className="font-display text-xl font-semibold text-navy">Companies</h1>
           <button
