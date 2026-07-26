@@ -60,10 +60,22 @@ export async function loadAudit(auditId) {
     .eq('audit_id', auditId)
   if (signoffErr) throw signoffErr
 
+  let currentCompany = null
+  if (auditRow.company_id) {
+    const { data: companyRow } = await supabase
+      .from('companies')
+      .select('id, name, logo_url')
+      .eq('id', auditRow.company_id)
+      .maybeSingle()
+    currentCompany = companyRow || null
+  }
+
   const audit = {
     id: auditRow.id,
-    client_name: auditRow.client_name || '',
-    logo_url: auditRow.logo_url || null,
+    client_name: currentCompany?.name || auditRow.client_name || '',
+    company_id: auditRow.company_id || null,
+    department_id: auditRow.department_id || null,
+    logo_url: currentCompany?.logo_url || auditRow.logo_url || null,
     standard: auditRow.standard || 'ISO 45001:2018',
     department: auditRow.department || '',
     process_owner: auditRow.process_owner || '',
@@ -134,6 +146,8 @@ export async function saveAudit({ auditId, audit, scope, checklist, signoffs }) 
   const auditPayload = {
     owner,
     client_name: audit.client_name,
+    company_id: audit.company_id || null,
+    department_id: audit.department_id || null,
     logo_url: audit.logo_url,
     standard: audit.standard,
     audit_type: audit.audit_type,

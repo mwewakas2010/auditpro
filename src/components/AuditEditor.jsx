@@ -18,8 +18,10 @@ function emptyAudit() {
   return {
     client_name: '',
     logo_url: null,
+    company_id: null,
     standard: 'ISO 45001:2018',
     department: '',
+    department_id: null,
     process_owner: '',
     other_participants: '',
     lead_auditor: '',

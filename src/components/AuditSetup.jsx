@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { STANDARD_LIST, getStandardInfo } from '../data/standards'
 import {
   AUDIT_TYPES,
@@ -7,6 +8,7 @@ import {
   DEFAULT_SAMPLING_DISCLAIMER,
   DEFAULT_CONFIDENTIALITY_STATEMENT,
 } from '../data/schemes'
+import { listCompanies, createCompany, createDepartment } from '../lib/companyRepo'
 
 const METHODS = [
   { key: 'interviews', label: 'Interviews' },
@@ -30,6 +32,63 @@ const inputCls =
 
 export default function AuditSetup({ audit, setAudit, scope, setScope, clauses, onStandardChange }) {
   const update = (key) => (e) => setAudit({ ...audit, [key]: e.target.value })
+  const [companies, setCompanies] = useState([])
+  const [companiesError, setCompaniesError] = useState('')
+
+  useEffect(() => {
+    listCompanies()
+      .then(setCompanies)
+      .catch((err) => setCompaniesError(err.message))
+  }, [])
+
+  const selectedCompany = companies.find((c) => c.id === audit.company_id)
+
+  const refreshCompanies = async () => {
+    try {
+      setCompanies(await listCompanies())
+    } catch (err) {
+      setCompaniesError(err.message)
+    }
+  }
+
+  const handleCompanyChange = async (e) => {
+    const val = e.target.value
+    if (val === '__new__') {
+      const name = prompt('New company name:')
+      if (!name || !name.trim()) return
+      try {
+        const id = await createCompany(name.trim(), null)
+        const updated = await listCompanies()
+        setCompanies(updated)
+        const co = updated.find((c) => c.id === id)
+        setAudit({ ...audit, company_id: id, client_name: co.name, department_id: null, department: '', logo_url: co.logo_url || null })
+      } catch (err) {
+        setCompaniesError(err.message)
+      }
+      return
+    }
+    const co = companies.find((c) => c.id === val)
+    if (!co) return
+    setAudit({ ...audit, company_id: co.id, client_name: co.name, department_id: null, department: '', logo_url: co.logo_url || null })
+  }
+
+  const handleDepartmentChange = async (e) => {
+    const val = e.target.value
+    if (val === '__new__') {
+      const name = prompt('New department name:')
+      if (!name || !name.trim()) return
+      try {
+        const id = await createDepartment(audit.company_id, name.trim())
+        await refreshCompanies()
+        setAudit({ ...audit, department_id: id, department: name.trim() })
+      } catch (err) {
+        setCompaniesError(err.message)
+      }
+      return
+    }
+    const dept = selectedCompany?.company_departments?.find((d) => d.id === val)
+    setAudit({ ...audit, department_id: dept?.id || null, department: dept?.name || '' })
+  }
 
   const toggleMethod = (key) => {
     const has = audit.methodology.includes(key)
@@ -56,19 +115,6 @@ export default function AuditSetup({ audit, setAudit, scope, setScope, clauses, 
         ? audit.discontinuation_conditions.filter((c) => c !== key)
         : [...audit.discontinuation_conditions, key],
     })
-  }
-
-  const handleLogoUpload = (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      // Storing as a base64 data URL (not a blob URL) so it can be embedded
-      // directly into the PDF cover page via jsPDF's addImage, and would be
-      // uploaded to Supabase Storage in the same form in the real build.
-      setAudit({ ...audit, logo_url: reader.result })
-    }
-    reader.readAsDataURL(file)
   }
 
   return (
@@ -98,25 +144,49 @@ export default function AuditSetup({ audit, setAudit, scope, setScope, clauses, 
           </div>
         </Field>
 
+        {companiesError && (
+          <div className="text-[11.5px] text-major bg-majorbg border border-major rounded p-2 mb-3">{companiesError}</div>
+        )}
+
         <div className="grid grid-cols-2 gap-4">
           <Field label="Company / Client">
-            <input className={inputCls} value={audit.client_name} onChange={update('client_name')} />
+            <select className={inputCls} value={audit.company_id || ''} onChange={handleCompanyChange}>
+              <option value="" disabled>Select a company…</option>
+              {companies.map((co) => (
+                <option key={co.id} value={co.id}>{co.name}</option>
+              ))}
+              <option value="__new__">+ New company…</option>
+            </select>
           </Field>
           <Field label="Client Logo">
-            <label className="block border-[1.5px] border-dashed border-line rounded-md p-5 text-center text-[12.5px] text-inksoft cursor-pointer bg-[#FCFBF8] hover:border-gold hover:text-gold">
+            <div className="border-[1.5px] border-line rounded-md p-3 flex items-center gap-3 bg-[#FCFBF8]">
               {audit.logo_url ? (
-                <img src={audit.logo_url} alt="Client logo" className="h-10 mx-auto object-contain" />
+                <img src={audit.logo_url} alt="Client logo" className="h-10 object-contain" />
               ) : (
-                '📎 Click to upload logo (cover page, draft & final report)'
+                <span className="text-[12px] text-inksoft">No logo set for this company yet.</span>
               )}
-              <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-            </label>
+            </div>
+            <div className="text-[10.5px] text-inksoft italic mt-1">
+              Logos are managed per company now, not per audit — go to "Manage Companies" from My Audits to upload
+              or change one, and it applies to every audit for that client.
+            </div>
           </Field>
         </div>
 
         <div className="grid grid-cols-3 gap-4">
           <Field label="Department / Section">
-            <input className={inputCls} value={audit.department} onChange={update('department')} />
+            <select
+              className={inputCls}
+              value={audit.department_id || ''}
+              onChange={handleDepartmentChange}
+              disabled={!audit.company_id}
+            >
+              <option value="" disabled>{audit.company_id ? 'Select a department…' : 'Select a company first'}</option>
+              {(selectedCompany?.company_departments || []).map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+              {audit.company_id && <option value="__new__">+ New department…</option>}
+            </select>
           </Field>
           <Field label="Process Owner">
             <input className={inputCls} value={audit.process_owner} onChange={update('process_owner')} />

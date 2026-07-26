@@ -9,7 +9,7 @@ const STATUS_CLS = {
   final: 'bg-conformbg text-conform',
 }
 
-export default function AuditList({ onOpen, onNew }) {
+export default function AuditList({ onOpen, onNew, onManageCompanies }) {
   const [audits, setAudits] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -44,12 +44,20 @@ export default function AuditList({ onOpen, onNew }) {
             SentinelPro Consultants
           </div>
         </div>
-        <button
-          onClick={() => supabase.auth.signOut()}
-          className="text-xs border border-white/30 px-3 py-1.5 rounded hover:bg-white/10"
-        >
-          Sign out
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={onManageCompanies}
+            className="text-xs border border-white/30 px-3 py-1.5 rounded hover:bg-white/10"
+          >
+            Manage Companies
+          </button>
+          <button
+            onClick={() => supabase.auth.signOut()}
+            className="text-xs border border-white/30 px-3 py-1.5 rounded hover:bg-white/10"
+          >
+            Sign out
+          </button>
+        </div>
       </div>
 
       <div className="max-w-4xl mx-auto p-8">

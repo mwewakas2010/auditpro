@@ -1,10 +1,42 @@
-# AuditPro — ISO Audit Management (Phase 3 — AI Drafting + Report Review)
+# AuditPro — ISO Audit Management (Company/Department model)
 
-Standalone app for SentinelPro Consultants. Phase 3 (in progress) has the AI
-drafting assistant and AI report reviewer built. The in-app help chatbot is
-still to come.
+Standalone app for SentinelPro Consultants. This pass adds real Company and
+Department records — the foundation for consolidated company reports,
+dashboards, and (later) client login access.
 
-## New in this pass: AI Report Reviewer
+## New in this pass: Companies & Departments
+
+- **"Manage Companies"** — new screen, linked from My Audits. Create a
+  company (name + logo — the logo now lives here, not per-audit), add
+  departments/sections under it, rename or delete.
+- **Audit Setup** — "Company / Client" and "Department / Section" are now
+  dropdowns tied to real records, not free text. You can create a new
+  company or department inline without leaving Setup ("+ New company…" /
+  "+ New department…" at the bottom of each dropdown).
+- **Logo is now company-level.** Upload it once per client in Manage
+  Companies, and every audit for that company — past and future — pulls the
+  current logo automatically. If you update a company's logo later, older
+  audits reopened afterward will show the new logo too (not the one that
+  was current when the audit was first created).
+- This is deliberately the **foundation**, not the full feature set —
+  consolidated company reports and dashboards build on top of this next.
+
+### Required one-time migration (do this before using the app after updating)
+
+1. Open Supabase → **SQL Editor** → **+ New query**.
+2. Paste and run the full contents of `supabase/migration_002_companies.sql`.
+3. **This is safe to run on your existing data** — unlike the original
+   `schema.sql`, this migration file does **not** drop any tables. It adds
+   the new `companies`/`company_departments` tables and two new columns on
+   `audits`, then automatically creates a Company (and Department, if set)
+   for every distinct client name your existing audits already have, and
+   links each audit to the right one. Your existing audits and their data
+   are untouched.
+4. After running it, existing audits will show up correctly linked in
+   Manage Companies — open one and check its Setup tab shows the right
+   company/department selected.
+
+## What's built (from earlier phases)
 
 - On the Conclusion & Sign-off tab, there's now an **"🔍 Review Report"**
   button.
