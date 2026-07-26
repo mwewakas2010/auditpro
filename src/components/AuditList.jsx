@@ -130,20 +130,20 @@ export default function AuditList({ onOpen, onNew }) {
   }
 
   return (
-    <div className="p-9">
-      <div className="flex justify-between items-center mb-5">
+    <div className="p-4 md:p-9">
+      <div className="flex flex-col md:flex-row justify-between md:items-center gap-3 mb-5">
         <h1 className="font-display text-xl font-semibold text-navy">My Audits</h1>
         <div className="flex items-center gap-3">
           <select
             value={sortMode}
             onChange={(e) => setSortMode(e.target.value)}
-            className="text-sm border border-line rounded px-2.5 py-1.5 bg-white"
+            className="flex-1 md:flex-none text-sm border border-line rounded px-2.5 py-1.5 bg-white"
           >
             {SORT_MODES.map((m) => (
               <option key={m.key} value={m.key}>{m.label}</option>
             ))}
           </select>
-          <button onClick={onNew} className="bg-navy text-white px-4 py-2 rounded text-sm font-medium">
+          <button onClick={onNew} className="bg-navy text-white px-4 py-2 rounded text-sm font-medium flex-shrink-0">
             + New Audit
           </button>
         </div>
@@ -166,7 +166,7 @@ export default function AuditList({ onOpen, onNew }) {
             <div key={company.key} className="bg-white border border-line rounded-md overflow-hidden">
               <div
                 onClick={() => toggleCollapsed(company.key)}
-                className="px-5 py-3 bg-paper flex justify-between items-center cursor-pointer border-b border-line"
+                className="px-4 md:px-5 py-3 bg-paper flex justify-between items-center cursor-pointer border-b border-line"
               >
                 <div className="font-display font-semibold text-[15px] text-navy">{company.name}</div>
                 <div className="flex items-center gap-3">
@@ -176,7 +176,7 @@ export default function AuditList({ onOpen, onNew }) {
               </div>
 
               {!isCollapsed && (
-                <div className="px-5 py-3">
+                <div className="px-4 md:px-5 py-3">
                   {company.standardEntries.map(([standard, list]) => (
                     <div key={standard} className="mb-4 last:mb-0">
                       <div className="text-[11px] font-semibold text-navy2 uppercase tracking-wide mb-1.5">
@@ -187,7 +187,7 @@ export default function AuditList({ onOpen, onNew }) {
                           <div
                             key={a.id}
                             onClick={() => onOpen(a.id)}
-                            className="border border-line rounded-md px-4 py-3 flex justify-between items-center cursor-pointer hover:border-navy2"
+                            className="border border-line rounded-md px-4 py-3 flex flex-col md:flex-row justify-between md:items-center gap-2.5 cursor-pointer hover:border-navy2"
                           >
                             <div>
                               <div className="font-medium text-[14px]">{a.department || 'No department'}</div>
@@ -196,7 +196,7 @@ export default function AuditList({ onOpen, onNew }) {
                                 {a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${STATUS_CLS[a.status]}`}>
                                 {STATUS_LABEL[a.status] || a.status}
                               </span>
@@ -205,14 +205,14 @@ export default function AuditList({ onOpen, onNew }) {
                                   <button
                                     onClick={() => moveAudit(list, idx, -1)}
                                     disabled={idx === 0}
-                                    className="text-[10px] leading-none px-1 disabled:opacity-20"
+                                    className="text-xs leading-none px-1.5 py-1 disabled:opacity-20"
                                   >
                                     ▲
                                   </button>
                                   <button
                                     onClick={() => moveAudit(list, idx, 1)}
                                     disabled={idx === list.length - 1}
-                                    className="text-[10px] leading-none px-1 disabled:opacity-20"
+                                    className="text-xs leading-none px-1.5 py-1 disabled:opacity-20"
                                   >
                                     ▼
                                   </button>
@@ -220,13 +220,13 @@ export default function AuditList({ onOpen, onNew }) {
                               )}
                               <button
                                 onClick={(e) => { e.stopPropagation(); onOpen(a.id) }}
-                                className="text-xs text-navy border border-navy/40 px-2.5 py-1 rounded hover:bg-paper"
+                                className="text-xs text-navy border border-navy/40 px-2.5 py-1.5 rounded hover:bg-paper"
                               >
                                 Open / Edit
                               </button>
                               <button
                                 onClick={(e) => handleDelete(a.id, e)}
-                                className="text-xs text-major border border-major/40 px-2.5 py-1 rounded hover:bg-majorbg"
+                                className="text-xs text-major border border-major/40 px-2.5 py-1.5 rounded hover:bg-majorbg"
                               >
                                 Delete
                               </button>

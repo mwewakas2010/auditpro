@@ -1,7 +1,9 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { getClauses, getStandardInfo } from '../data/standards'
 import { schemeForAuditType } from '../data/schemes'
-import { loadAudit, saveAudit } from '../lib/auditRepo'
+import { loadAudit, saveAudit, syncPendingAudits } from '../lib/auditRepo'
+import { saveLocalAudit, getLocalAudit, deleteLocalAudit } from '../lib/offlineStore'
+import { useOnlineStatus } from '../lib/useOnlineStatus'
 import AuditSetup from './AuditSetup.jsx'
 import Checklist from './Checklist.jsx'
 import Findings from './Findings.jsx'
@@ -67,6 +69,10 @@ function emptyChecklistFor(clauses) {
 
 export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved }) {
   const [id, setId] = useState(auditId) // becomes set once a new audit is first saved
+  // Stable local storage key: the real audit id if editing an existing one,
+  // or a fresh "local-..." id for a brand-new audit that has never touched
+  // the server yet. This is what offline edits get queued under.
+  const [localId, setLocalId] = useState(() => auditId || `local-${crypto.randomUUID()}`)
   const [audit, setAudit] = useState(emptyAudit)
   const [scope, setScope] = useState(() => emptyScopeFor(getClauses(emptyAudit().standard)))
   const [checklist, setChecklist] = useState(() => emptyChecklistFor(getClauses(emptyAudit().standard)))
@@ -75,6 +81,11 @@ export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved }
   const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
+  const [offlineLoaded, setOfflineLoaded] = useState(false) // true if we loaded from local cache, not the server
+
+  const online = useOnlineStatus()
+  const hasInitiallyLoaded = useRef(false)
+  const wasOffline = useRef(!online)
 
   const clauses = useMemo(() => getClauses(audit.standard), [audit.standard])
   const inScopeClauses = useMemo(
@@ -95,22 +106,92 @@ export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved }
     setChecklist(emptyChecklistFor(newClauses))
   }
 
+  // ---- Load: prefer unsynced local edits over the server copy ----
   useEffect(() => {
-    if (!auditId) return
+    if (!auditId) {
+      setLoading(false)
+      return
+    }
     ;(async () => {
       try {
+        const local = await getLocalAudit(auditId)
+        if (local && local.pendingSync) {
+          // There are offline edits for this audit that haven't reached the
+          // server yet - use those rather than risk overwriting them with
+          // (now stale) server data.
+          setAudit(local.audit)
+          setScope(local.scope)
+          setChecklist(local.checklist)
+          setSignoffs(local.signoffs)
+          setOfflineLoaded(true)
+          setLoading(false)
+          return
+        }
         const result = await loadAudit(auditId)
         setAudit(result.audit)
         setScope(result.scope)
         setChecklist(result.checklist)
         setSignoffs(result.signoffs)
+        // Cache a non-pending copy so this audit can still be opened (and
+        // edited offline) even with zero signal next time.
+        await saveLocalAudit(auditId, { audit: result.audit, scope: result.scope, checklist: result.checklist, signoffs: result.signoffs, pendingSync: false })
       } catch (err) {
-        setLoadError(err.message)
+        // Network load failed - last resort, fall back to any local cache
+        // (even a non-pending one) so the audit is still viewable offline.
+        const local = await getLocalAudit(auditId)
+        if (local) {
+          setAudit(local.audit)
+          setScope(local.scope)
+          setChecklist(local.checklist)
+          setSignoffs(local.signoffs)
+          setOfflineLoaded(true)
+        } else {
+          setLoadError(err.message)
+        }
       } finally {
         setLoading(false)
+        hasInitiallyLoaded.current = true
       }
     })()
   }, [auditId])
+
+  useEffect(() => {
+    if (!auditId) hasInitiallyLoaded.current = true
+  }, [auditId])
+
+  // ---- Auto-save to local storage on every change, as a safety net ----
+  useEffect(() => {
+    if (!hasInitiallyLoaded.current) return
+    const t = setTimeout(() => {
+      saveLocalAudit(localId, { audit, scope, checklist, signoffs, pendingSync: true })
+    }, 600)
+    return () => clearTimeout(t)
+  }, [audit, scope, checklist, signoffs, localId])
+
+  // ---- Sync automatically the moment connectivity returns ----
+  useEffect(() => {
+    if (online && wasOffline.current) {
+      syncPendingAudits().then(({ succeeded, failed, total, synced }) => {
+        if (total > 0) {
+          setSaveMsg(
+            failed > 0
+              ? `Back online — synced ${succeeded} of ${total} pending audit(s), ${failed} failed.`
+              : `Back online — synced ${succeeded} pending audit(s).`
+          )
+        }
+        // If the audit currently open in this editor was one of the ones
+        // just synced in the background, adopt its new real server id so
+        // the next manual save updates it instead of inserting a duplicate.
+        const match = synced?.find((s) => s.localId === localId)
+        if (match) {
+          setId(match.realId)
+          setLocalId(match.realId)
+          onAuditSaved?.(match.realId)
+        }
+      })
+    }
+    wasOffline.current = !online
+  }, [online])
 
   const scheme = useMemo(() => schemeForAuditType(audit.audit_type), [audit.audit_type])
   const completedCount = useMemo(
@@ -121,8 +202,24 @@ export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved }
   const handleSave = async () => {
     setSaving(true)
     setSaveMsg('')
+
+    if (!online) {
+      // Offline: don't even attempt the network call - just make sure the
+      // local safety-net copy is current and clearly marked as pending.
+      await saveLocalAudit(localId, { audit, scope, checklist, signoffs, pendingSync: true })
+      setSaveMsg('📴 Offline — saved on this device. Will sync automatically once you\'re back online.')
+      setSaving(false)
+      return
+    }
+
     try {
       const savedId = await saveAudit({ auditId: id, audit, scope, checklist, signoffs })
+      // If this was a brand-new audit (previously only a local-... id),
+      // migrate the local cache entry to the real server id.
+      if (localId !== savedId) {
+        await deleteLocalAudit(localId)
+        setLocalId(savedId)
+      }
       setId(savedId)
       onAuditSaved?.(savedId)
       // Reload from the server so uploaded evidence/logo URLs replace local
@@ -132,9 +229,13 @@ export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved }
       setScope(result.scope)
       setChecklist(result.checklist)
       setSignoffs(result.signoffs)
+      await saveLocalAudit(savedId, { audit: result.audit, scope: result.scope, checklist: result.checklist, signoffs: result.signoffs, pendingSync: false })
       setSaveMsg('Saved ' + new Date().toLocaleTimeString())
     } catch (err) {
-      setSaveMsg('Error: ' + err.message)
+      // The network call itself failed (e.g. connection dropped mid-save) -
+      // fall back to the same offline-safe local save rather than losing work.
+      await saveLocalAudit(localId, { audit, scope, checklist, signoffs, pendingSync: true })
+      setSaveMsg('Could not reach the server — saved on this device instead. Will retry automatically once back online.')
     }
     setSaving(false)
   }
@@ -158,19 +259,19 @@ export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved }
 
   return (
     <div className="flex-1 min-w-0 min-h-0 flex flex-col h-full overflow-hidden">
-      <div className="bg-white border-b border-line px-8 py-4 flex justify-between items-center">
+      <div className="bg-white border-b border-line px-4 md:px-8 py-3 md:py-4 flex flex-col md:flex-row justify-between md:items-center gap-3">
         <div>
-          <div className="font-display font-semibold text-xl">{audit.client_name || 'Untitled Audit'}</div>
-          <div className="font-mono text-[11.5px] text-inksoft mt-0.5">
+          <div className="font-display font-semibold text-lg md:text-xl">{audit.client_name || 'Untitled Audit'}</div>
+          <div className="font-mono text-[11px] md:text-[11.5px] text-inksoft mt-0.5">
             {audit.standard} • {audit.department || 'No department set'} • {audit.start_date || 'No date set'}
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <div className="font-mono text-[11.5px] text-inksoft">
+        <div className="flex items-center justify-between md:justify-end gap-3 md:gap-4">
+          <div className="text-left md:text-right">
+            <div className="font-mono text-[11px] md:text-[11.5px] text-inksoft">
               {completedCount} of {inScopeClauses.length} clauses complete
             </div>
-            <div className="w-40 h-1.5 bg-line rounded-full overflow-hidden mt-1">
+            <div className="w-28 md:w-40 h-1.5 bg-line rounded-full overflow-hidden mt-1">
               <div
                 className="h-full bg-gold"
                 style={{ width: `${(completedCount / inScopeClauses.length) * 100}%` }}
@@ -180,19 +281,36 @@ export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved }
           <button
             onClick={handleSave}
             disabled={saving}
-            className="bg-navy text-white px-4 py-2 rounded text-sm font-medium disabled:opacity-50"
+            className="bg-navy text-white px-4 py-2.5 md:py-2 rounded text-sm font-medium disabled:opacity-50 flex-shrink-0"
           >
             {saving ? 'Saving…' : 'Save Audit'}
           </button>
+          <div className={`flex items-center gap-1.5 text-[11px] font-medium flex-shrink-0 ${online ? 'text-conform' : 'text-major'}`}>
+            <span className={`w-2 h-2 rounded-full ${online ? 'bg-conform' : 'bg-major'}`} />
+            {online ? 'Online' : 'Offline'}
+          </div>
         </div>
       </div>
+      {offlineLoaded && (
+        <div className="px-4 md:px-8 py-1.5 text-xs bg-minorbg text-minor">
+          📴 Showing the last version saved on this device — no connection right now. Your edits will sync once you're back online.
+        </div>
+      )}
       {saveMsg && (
-        <div className={`px-8 py-1.5 text-xs ${saveMsg.startsWith('Error') ? 'bg-majorbg text-major' : 'bg-conformbg text-conform'}`}>
+        <div
+          className={`px-4 md:px-8 py-1.5 text-xs ${
+            saveMsg.startsWith('Could not reach') || saveMsg.startsWith('Error')
+              ? 'bg-majorbg text-major'
+              : saveMsg.startsWith('📴')
+              ? 'bg-minorbg text-minor'
+              : 'bg-conformbg text-conform'
+          }`}
+        >
           {saveMsg}
         </div>
       )}
 
-      <div className="p-9 overflow-y-auto flex-1">
+      <div className="p-4 md:p-9 overflow-y-auto flex-1">
         {activeTab === 'setup' && (
           <AuditSetup
             audit={audit}

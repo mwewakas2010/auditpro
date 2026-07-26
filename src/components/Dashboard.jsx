@@ -29,7 +29,7 @@ export default function Dashboard() {
   }, [])
 
   return (
-    <div className="p-9">
+    <div className="p-4 md:p-9">
       <h2 className="font-display text-[19px] font-semibold text-navy mb-1">Dashboard</h2>
       <div className="text-[12.5px] text-inksoft mb-6">A quick overview across your whole practice.</div>
 
@@ -38,7 +38,7 @@ export default function Dashboard() {
 
       {stats && (
         <>
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             <StatCard n={stats.companies} label="Companies" />
             <StatCard n={stats.totalAudits} label="Total Audits" />
             <StatCard n={stats.final} label="Final Reports" color="text-conform" />

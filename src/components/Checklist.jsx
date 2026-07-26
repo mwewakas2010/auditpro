@@ -105,7 +105,7 @@ export default function Checklist({ scheme, checklist, setChecklist, clauses, st
               entry.status === 'conform' ? 'border-conform' : 'border-line'
             }`}
           >
-            <div className="px-5 py-3.5 border-b border-line relative">
+            <div className="px-4 md:px-5 py-3.5 border-b border-line relative">
               <div className="font-mono text-xs text-gold font-semibold tracking-wide">{c.clause_code}</div>
               <div className="font-display text-[15.5px] font-semibold mt-0.5">{c.title}</div>
               <div className="text-[12.5px] text-inksoft mt-1.5 leading-relaxed">{c.requirement_text}</div>
@@ -116,13 +116,13 @@ export default function Checklist({ scheme, checklist, setChecklist, clauses, st
               )}
             </div>
 
-            <div className="px-5 py-4">
+            <div className="px-4 md:px-5 py-4">
               <div className="flex gap-2 mb-3.5 flex-wrap">
                 {statuses.map((st) => (
                   <button
                     key={st.key}
                     onClick={() => updateEntry(c.clause_code, { status: st.key })}
-                    className={`px-3.5 py-1.5 rounded border-[1.5px] text-xs font-medium ${
+                    className={`px-3.5 py-2 md:py-1.5 rounded border-[1.5px] text-xs font-medium ${
                       entry.status === st.key ? statusBtnActive[st.key] : 'border-line bg-white'
                     }`}
                   >
@@ -131,7 +131,7 @@ export default function Checklist({ scheme, checklist, setChecklist, clauses, st
                 ))}
               </div>
 
-              <div className="grid grid-cols-[1fr_220px] gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_220px] gap-4">
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-[11.5px] font-semibold text-navy2 uppercase tracking-wide">

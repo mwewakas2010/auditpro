@@ -110,7 +110,7 @@ export default function ReportSignoff({ audit, setAudit, signoffs, setSignoffs, 
       )}
 
       <div className="bg-white border border-line rounded-md p-6 mb-5">
-        <div className="flex justify-between items-center mb-2">
+        <div className="flex flex-col md:flex-row justify-between md:items-center gap-2 mb-2">
           <h3 className="font-display text-[15px] font-semibold text-navy">AI Report Review</h3>
           <button
             onClick={runReview}
@@ -166,7 +166,7 @@ export default function ReportSignoff({ audit, setAudit, signoffs, setSignoffs, 
 
       <div className="bg-white border border-line rounded-md p-6 mb-5">
         <h3 className="font-display text-[15px] font-semibold text-navy mb-4">Sign-off</h3>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <SignPad
             label={`Lead Auditor — ${audit.lead_auditor || '(not set)'}`}
             signed={signoffs.lead_auditor}
@@ -180,21 +180,21 @@ export default function ReportSignoff({ audit, setAudit, signoffs, setSignoffs, 
         </div>
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex flex-col md:flex-row gap-3">
         <button
-          className="bg-navy text-white px-5.5 py-2.5 rounded font-medium text-[13.5px]"
+          className="bg-navy text-white px-5.5 py-2.5 rounded font-medium text-[13.5px] w-full md:w-auto"
           onClick={async () => await generateAuditPdf({ audit, signoffs, checklist, scope, clauses })}
         >
           Export Draft PDF
         </button>
         <button
-          className="bg-white text-navy border-[1.5px] border-navy px-5 py-2.5 rounded font-medium text-[13.5px]"
+          className="bg-white text-navy border-[1.5px] border-navy px-5 py-2.5 rounded font-medium text-[13.5px] w-full md:w-auto"
           onClick={() => alert('Phase 2: generates a matching .docx for editing.')}
         >
           Export Word (.docx)
         </button>
         <button
-          className="bg-white text-navy border-[1.5px] border-navy px-5 py-2.5 rounded font-medium text-[13.5px]"
+          className="bg-white text-navy border-[1.5px] border-navy px-5 py-2.5 rounded font-medium text-[13.5px] w-full md:w-auto"
           onClick={() => setAudit({ ...audit, status: 'final' })}
         >
           Mark as Final

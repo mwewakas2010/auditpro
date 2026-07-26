@@ -146,9 +146,9 @@ export default function Companies() {
   }
 
   return (
-    <div className="p-9">
+    <div className="p-4 md:p-9">
       <div className="max-w-3xl">
-        <div className="flex justify-between items-center mb-5">
+        <div className="flex flex-col md:flex-row justify-between md:items-center gap-3 mb-5">
           <h1 className="font-display text-xl font-semibold text-navy">Companies</h1>
           <button
             onClick={() => setShowNewCompany(!showNewCompany)}
@@ -161,7 +161,7 @@ export default function Companies() {
         {error && <div className="text-sm text-major bg-majorbg border border-major rounded p-3 mb-4">{error}</div>}
 
         {showNewCompany && (
-          <div className="bg-white border border-line rounded-md p-5 mb-4">
+          <div className="bg-white border border-line rounded-md p-4 md:p-5 mb-4">
             <label className="block text-[11.5px] font-semibold text-navy2 mb-1.5 uppercase tracking-wide">
               Company Name
             </label>
@@ -202,7 +202,7 @@ export default function Companies() {
           {companies.map((co) => (
             <div key={co.id} className="bg-white border border-line rounded-md overflow-hidden">
               <div
-                className="px-5 py-4 flex justify-between items-center cursor-pointer"
+                className="px-4 md:px-5 py-4 flex justify-between items-center cursor-pointer"
                 onClick={() => setExpanded(expanded === co.id ? null : co.id)}
               >
                 <div className="flex items-center gap-3">
@@ -222,7 +222,7 @@ export default function Companies() {
               </div>
 
               {expanded === co.id && (
-                <div className="border-t border-line px-5 py-4 bg-paper">
+                <div className="border-t border-line px-4 md:px-5 py-4 bg-paper">
                   <div className="mb-4">
                     <label className="block text-[11px] font-semibold text-navy2 mb-1.5 uppercase tracking-wide">
                       Company Logo
@@ -289,7 +289,7 @@ export default function Companies() {
                             </div>
                             <div className="flex flex-col gap-1 mb-3 max-h-52 overflow-y-auto">
                               {reportAudits.map((a) => (
-                                <label key={a.id} className="flex items-center gap-2 text-xs py-1 border-b border-line">
+                                <label key={a.id} className="flex items-center gap-2 text-xs py-1.5 border-b border-line flex-wrap">
                                   <input
                                     type="checkbox"
                                     checked={selectedAuditIds.has(a.id)}
@@ -319,7 +319,7 @@ export default function Companies() {
                     )}
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-line flex justify-between items-center">
+                  <div className="mt-4 pt-3 border-t border-line flex flex-col md:flex-row justify-between md:items-center gap-2">
                     <button
                       onClick={() => {
                         const name = prompt('Rename company:', co.name)

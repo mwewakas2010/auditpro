@@ -1,35 +1,47 @@
-# AuditPro — ISO Audit Management (Installable PWA — Step 1 of 2)
+# AuditPro — ISO Audit Management (Offline Data Sync — Step 2 of 2)
 
-Standalone app for SentinelPro Consultants. This pass makes AuditPro a
-proper installable PWA. **This is Step 1 of the mobile/offline work — see
-below for what's still to come.**
+Standalone app for SentinelPro Consultants. This pass adds the offline
+**data** layer on top of last pass's installable PWA shell — the real
+field-use capability.
 
-## New in this pass: Installable PWA
+## New in this pass: Offline data sync
 
-- **Home-screen install** — on Android (Chrome) you'll see an "Install" /
-  "Add to Home Screen" prompt automatically; on iPhone (Safari), use
-  Share → "Add to Home Screen" manually (iOS doesn't offer an automatic
-  prompt for PWAs the way Android does).
-- Opens **full-screen**, no browser address bar, with the app's navy/gold
-  branding as the icon.
-- **The app's interface itself now loads even with zero signal** — the
-  built JS/CSS/HTML shell is precached by a service worker, so opening the
-  installed app in a dead zone shows the real interface, not a blank page
-  or browser error.
+**What works offline now:**
+- Once you've opened an audit while online, you can keep editing it —
+  checklist entries, evidence photos, Setup fields — with **zero signal**.
+  Everything saves to the device automatically as you work (a local
+  safety-net copy, ~600ms after each change).
+- An **Online/Offline indicator** sits next to the Save Audit button at all
+  times, so you always know your current state.
+- Clicking **Save Audit while offline** doesn't error out — it saves to the
+  device and tells you clearly: *"📴 Offline — saved on this device. Will
+  sync automatically once you're back online."*
+- The moment connectivity returns, **all pending offline changes sync to
+  Supabase automatically** — no button to press. You'll see a message like
+  *"Back online — synced 2 pending audit(s)."*
+- If you open an audit and there's no connection, it falls back to the last
+  version saved on this device, with a clear banner explaining that's what
+  you're looking at.
+- The Setup screen's Company/Department dropdowns fall back to the last
+  cached company list if you're offline — so you can still pick an existing
+  company/department for field work, even with zero signal.
 
-### Important — what this does NOT yet do
+**What does NOT work offline (known, deliberate boundaries):**
+- **Browsing your full "My Audits" history offline** — that list still
+  needs a live connection.
+- **Creating a brand-new company or department while fully offline** — that
+  needs a live connection too (though picking an *existing* one from the
+  cached list works fine).
+- If you've never opened a given audit while online even once, there's
+  nothing cached for it to fall back to offline.
 
-This step makes the **app shell** installable and offline-loadable. It does
-**not** yet make **audit data** (checklist entries, evidence photos, saving)
-work without a connection — those still require live Supabase access, same
-as before. If you open the app with no signal, the interface loads, but
-trying to open/save an audit will still fail until you have a connection.
-
-**Step 2 (separate, larger build)**: local-first data storage — checklist
-entries and photos save to the device even offline, then sync to Supabase
-automatically once back online. This touches how the app reads/writes data
-almost everywhere, so it's being built as its own dedicated step rather than
-rushed in alongside this one.
+**How it's built** (for reference): a local IndexedDB store keeps a working
+copy of whatever audit is open, marked "pending sync" whenever there are
+unsaved changes. A background sync routine fires automatically on
+reconnect, pushing every pending audit to Supabase and clearing the pending
+flag once confirmed. If a brand-new audit was created entirely offline, it
+gets a temporary local ID until its first successful sync, at which point
+it's reconciled with the real server ID so nothing gets duplicated.
 
 ## What's built (from earlier passes)
 

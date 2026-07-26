@@ -26,7 +26,7 @@ export default function Findings({ scheme, checklist, clauses }) {
         Auto-derived from checklist entries. Updates live as you audit.
       </div>
 
-      <div className="flex gap-3.5 mb-5">
+      <div className="grid grid-cols-2 md:flex gap-3 md:gap-3.5 mb-5">
         {scheme === 'full' ? (
           <>
             <Stat n={counts.major} l="Major NC" color="text-major" />
@@ -44,55 +44,87 @@ export default function Findings({ scheme, checklist, clauses }) {
         )}
       </div>
 
-      <div className="bg-white border border-line rounded-md overflow-hidden">
-        {rows.length === 0 ? (
-          <div className="p-10 text-center text-inksoft text-[13px]">
-            No findings yet — mark checklist items in the Checklist tab.
-          </div>
-        ) : (
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                {['Clause', 'Requirement', 'Nonconformance / Finding', 'Evidence'].map((h) => (
-                  <th key={h} className="text-left text-[11px] uppercase tracking-wide text-inksoft px-3 py-2.5 border-b-2 border-line">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((c) => {
-                const entry = checklist[c.clause_code]
-                const b = badgeInfo(entry.status)
-                return (
-                  <tr key={c.clause_code}>
-                    <td className="px-3 py-3 border-b border-line align-top">
+      {rows.length === 0 ? (
+        <div className="bg-white border border-line rounded-md p-10 text-center text-inksoft text-[13px]">
+          No findings yet — mark checklist items in the Checklist tab.
+        </div>
+      ) : (
+        <>
+          {/* Mobile: stacked cards */}
+          <div className="md:hidden flex flex-col gap-3">
+            {rows.map((c) => {
+              const entry = checklist[c.clause_code]
+              const b = badgeInfo(entry.status)
+              return (
+                <div key={c.clause_code} className="bg-white border border-line rounded-md p-4">
+                  <div className="flex justify-between items-start gap-2 mb-2">
+                    <div>
                       <div className="font-mono text-[12.5px]">{c.clause_code}</div>
-                      <div className="text-[10.5px] text-inksoft mt-0.5">{c.title}</div>
-                    </td>
-                    <td className="px-3 py-3 border-b border-line align-top text-[13px]">{c.requirement_text}</td>
-                    <td className="px-3 py-3 border-b border-line align-top text-[13px]">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${badgeCls[b.cls]}`}>
-                        {b.label}
-                      </span>
-                      <div className="mt-1.5">
-                        {entry.evidenceText || <em className="text-inksoft">No finding text entered yet</em>}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 border-b border-line align-top text-xs">
-                      {entry.evidenceAvailable ? (
-                        <span className="text-conform font-semibold">✓ Available</span>
-                      ) : (
-                        <span className="text-major font-semibold">✕ Not available</span>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+                      <div className="text-[11px] text-inksoft mt-0.5">{c.title}</div>
+                    </div>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold flex-shrink-0 ${badgeCls[b.cls]}`}>
+                      {b.label}
+                    </span>
+                  </div>
+                  <div className="text-[13px] mb-2">
+                    {entry.evidenceText || <em className="text-inksoft">No finding text entered yet</em>}
+                  </div>
+                  {entry.evidenceAvailable ? (
+                    <span className="text-conform font-semibold text-xs">✓ Evidence available</span>
+                  ) : (
+                    <span className="text-major font-semibold text-xs">✕ Evidence not available</span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Desktop: table */}
+          <div className="hidden md:block bg-white border border-line rounded-md overflow-hidden">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  {['Clause', 'Requirement', 'Nonconformance / Finding', 'Evidence'].map((h) => (
+                    <th key={h} className="text-left text-[11px] uppercase tracking-wide text-inksoft px-3 py-2.5 border-b-2 border-line">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((c) => {
+                  const entry = checklist[c.clause_code]
+                  const b = badgeInfo(entry.status)
+                  return (
+                    <tr key={c.clause_code}>
+                      <td className="px-3 py-3 border-b border-line align-top">
+                        <div className="font-mono text-[12.5px]">{c.clause_code}</div>
+                        <div className="text-[10.5px] text-inksoft mt-0.5">{c.title}</div>
+                      </td>
+                      <td className="px-3 py-3 border-b border-line align-top text-[13px]">{c.requirement_text}</td>
+                      <td className="px-3 py-3 border-b border-line align-top text-[13px]">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${badgeCls[b.cls]}`}>
+                          {b.label}
+                        </span>
+                        <div className="mt-1.5">
+                          {entry.evidenceText || <em className="text-inksoft">No finding text entered yet</em>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 border-b border-line align-top text-xs">
+                        {entry.evidenceAvailable ? (
+                          <span className="text-conform font-semibold">✓ Available</span>
+                        ) : (
+                          <span className="text-major font-semibold">✕ Not available</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   )
 }

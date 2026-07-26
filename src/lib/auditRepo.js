@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient'
 import { getClauses } from '../data/standards'
+import { listPendingAudits, deleteLocalAudit } from './offlineStore'
 
 // ---------- Storage ----------
 
@@ -265,4 +266,36 @@ export async function saveAudit({ auditId, audit, scope, checklist, signoffs }) 
   }
 
   return id
+}
+
+// Pushes every locally-queued (offline-created/edited) audit up to
+// Supabase, one at a time. Called automatically when the app detects it's
+// back online, and can also be triggered manually. Returns a summary so the
+// UI can report what happened.
+export async function syncPendingAudits() {
+  const pending = await listPendingAudits()
+  let succeeded = 0
+  let failed = 0
+  const synced = [] // { localId, realId } for the caller to reconcile open editors against
+  for (const entry of pending) {
+    try {
+      // A brand-new audit created entirely offline has a "local-..." id,
+      // not a real Supabase one - pass null so saveAudit inserts a fresh row.
+      const realAuditId = entry.localId.startsWith('local-') ? null : entry.localId
+      const realId = await saveAudit({
+        auditId: realAuditId,
+        audit: entry.audit,
+        scope: entry.scope,
+        checklist: entry.checklist,
+        signoffs: entry.signoffs,
+      })
+      await deleteLocalAudit(entry.localId)
+      synced.push({ localId: entry.localId, realId })
+      succeeded++
+    } catch (err) {
+      failed++
+      console.error('Sync failed for', entry.localId, err)
+    }
+  }
+  return { succeeded, failed, total: pending.length, synced }
 }

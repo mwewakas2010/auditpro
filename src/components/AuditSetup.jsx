@@ -9,6 +9,7 @@ import {
   DEFAULT_CONFIDENTIALITY_STATEMENT,
 } from '../data/schemes'
 import { listCompanies, createCompany, createDepartment } from '../lib/companyRepo'
+import { cacheCompaniesList, getCachedCompaniesList } from '../lib/offlineStore'
 
 const METHODS = [
   { key: 'interviews', label: 'Interviews' },
@@ -34,11 +35,24 @@ export default function AuditSetup({ audit, setAudit, scope, setScope, clauses, 
   const update = (key) => (e) => setAudit({ ...audit, [key]: e.target.value })
   const [companies, setCompanies] = useState([])
   const [companiesError, setCompaniesError] = useState('')
+  const [usingCachedCompanies, setUsingCachedCompanies] = useState(false)
 
   useEffect(() => {
     listCompanies()
-      .then(setCompanies)
-      .catch((err) => setCompaniesError(err.message))
+      .then((data) => {
+        setCompanies(data)
+        cacheCompaniesList(data)
+        setUsingCachedCompanies(false)
+      })
+      .catch(() => {
+        const cached = getCachedCompaniesList()
+        if (cached.length) {
+          setCompanies(cached)
+          setUsingCachedCompanies(true)
+        } else {
+          setCompaniesError('Could not load companies (no connection, and nothing cached on this device yet).')
+        }
+      })
   }, [])
 
   const selectedCompany = companies.find((c) => c.id === audit.company_id)
@@ -124,9 +138,9 @@ export default function AuditSetup({ audit, setAudit, scope, setScope, clauses, 
         Define criteria, participants and scope before fieldwork begins.
       </div>
 
-      <div className="bg-white border border-line rounded-md p-6 mb-5">
+      <div className="bg-white border border-line rounded-md p-4 md:p-6 mb-5">
         <Field label="Audit Criteria">
-          <div className="flex gap-2.5">
+          <div className="flex gap-2.5 flex-wrap">
             {STANDARD_LIST.map((std) => (
               <div
                 key={std.key}
@@ -147,8 +161,14 @@ export default function AuditSetup({ audit, setAudit, scope, setScope, clauses, 
         {companiesError && (
           <div className="text-[11.5px] text-major bg-majorbg border border-major rounded p-2 mb-3">{companiesError}</div>
         )}
+        {usingCachedCompanies && (
+          <div className="text-[11.5px] text-minor bg-minorbg border border-minor rounded p-2 mb-3">
+            📴 No connection — showing the last company list saved on this device. Adding a brand-new company or
+            department needs a connection, but selecting an existing one works fine offline.
+          </div>
+        )}
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Company / Client">
             <select className={inputCls} value={audit.company_id || ''} onChange={handleCompanyChange}>
               <option value="" disabled>Select a company…</option>
@@ -173,7 +193,7 @@ export default function AuditSetup({ audit, setAudit, scope, setScope, clauses, 
           </Field>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Department / Section">
             <select
               className={inputCls}
@@ -196,7 +216,7 @@ export default function AuditSetup({ audit, setAudit, scope, setScope, clauses, 
           </Field>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Lead Auditor">
             <input className={inputCls} value={audit.lead_auditor} onChange={update('lead_auditor')} />
           </Field>
@@ -212,7 +232,7 @@ export default function AuditSetup({ audit, setAudit, scope, setScope, clauses, 
           </Field>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Audit Start Date">
             <input type="date" className={inputCls} value={audit.start_date} onChange={update('start_date')} />
           </Field>
@@ -234,47 +254,79 @@ export default function AuditSetup({ audit, setAudit, scope, setScope, clauses, 
       </div>
 
       {/* Clause scope */}
-      <div className="bg-white border border-line rounded-md p-6 mb-5">
+      <div className="bg-white border border-line rounded-md p-4 md:p-6 mb-5">
         <h3 className="font-display text-[15px] font-semibold text-navy mb-1">
           Clause Scope — set what will and won't be audited
         </h3>
         <div className="text-[12.5px] text-inksoft mb-4">
           Toggle each clause In / Out. Excluded clauses require a reason — this appears in the final report.
         </div>
-        <div className="grid grid-cols-[70px_1fr_90px_1fr] gap-3 pb-2 border-b-2 border-line text-[11px] uppercase text-inksoft">
+        <div className="hidden md:grid grid-cols-[70px_1fr_90px_1fr] gap-3 pb-2 border-b-2 border-line text-[11px] uppercase text-inksoft">
           <div>Clause</div><div>Title</div><div>Scope</div><div>Reason if excluded</div>
         </div>
         {clauses.map((c) => {
           const s = scope[c.clause_code]
           return (
-            <div key={c.clause_code} className="grid grid-cols-[70px_1fr_90px_1fr] gap-3 items-start py-2.5 border-b border-line last:border-0">
-              <div className="font-mono text-[12.5px] text-navy2 font-semibold pt-1.5">{c.clause_code}</div>
-              <div className="text-[13px] pt-1.5">{c.title}</div>
-              <div className="flex gap-1.5">
-                <button
-                  onClick={() => setClauseScope(c.clause_code, true)}
-                  className={`text-[11px] px-2.5 py-1 rounded border ${s.inScope ? 'bg-conform text-white border-conform' : 'border-line bg-white'}`}
-                >In</button>
-                <button
-                  onClick={() => setClauseScope(c.clause_code, false)}
-                  className={`text-[11px] px-2.5 py-1 rounded border ${!s.inScope ? 'bg-nabg text-na border-na' : 'border-line bg-white'}`}
-                >Out</button>
+            <div key={c.clause_code} className="py-3 border-b border-line last:border-0">
+              {/* Desktop: single-row table layout */}
+              <div className="hidden md:grid grid-cols-[70px_1fr_90px_1fr] gap-3 items-start">
+                <div className="font-mono text-[12.5px] text-navy2 font-semibold pt-1.5">{c.clause_code}</div>
+                <div className="text-[13px] pt-1.5">{c.title}</div>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => setClauseScope(c.clause_code, true)}
+                    className={`text-[11px] px-2.5 py-1 rounded border ${s.inScope ? 'bg-conform text-white border-conform' : 'border-line bg-white'}`}
+                  >In</button>
+                  <button
+                    onClick={() => setClauseScope(c.clause_code, false)}
+                    className={`text-[11px] px-2.5 py-1 rounded border ${!s.inScope ? 'bg-nabg text-na border-na' : 'border-line bg-white'}`}
+                  >Out</button>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Reason for exclusion"
+                  disabled={s.inScope}
+                  value={s.exclusionReason}
+                  onChange={(e) => setExclusionReason(c.clause_code, e.target.value)}
+                  className="w-full px-2 py-1.5 border border-line rounded text-[12.5px] disabled:bg-[#F1EFE9] disabled:text-[#B7B3A6]"
+                />
               </div>
-              <input
-                type="text"
-                placeholder="Reason for exclusion"
-                disabled={s.inScope}
-                value={s.exclusionReason}
-                onChange={(e) => setExclusionReason(c.clause_code, e.target.value)}
-                className="w-full px-2 py-1.5 border border-line rounded text-[12.5px] disabled:bg-[#F1EFE9] disabled:text-[#B7B3A6]"
-              />
+
+              {/* Mobile: stacked card layout */}
+              <div className="md:hidden">
+                <div className="flex justify-between items-start gap-2 mb-2">
+                  <div>
+                    <div className="font-mono text-[12.5px] text-navy2 font-semibold">{c.clause_code}</div>
+                    <div className="text-[13px] mt-0.5">{c.title}</div>
+                  </div>
+                  <div className="flex gap-1.5 flex-shrink-0">
+                    <button
+                      onClick={() => setClauseScope(c.clause_code, true)}
+                      className={`text-xs px-3 py-1.5 rounded border ${s.inScope ? 'bg-conform text-white border-conform' : 'border-line bg-white'}`}
+                    >In</button>
+                    <button
+                      onClick={() => setClauseScope(c.clause_code, false)}
+                      className={`text-xs px-3 py-1.5 rounded border ${!s.inScope ? 'bg-nabg text-na border-na' : 'border-line bg-white'}`}
+                    >Out</button>
+                  </div>
+                </div>
+                {!s.inScope && (
+                  <input
+                    type="text"
+                    placeholder="Reason for exclusion"
+                    value={s.exclusionReason}
+                    onChange={(e) => setExclusionReason(c.clause_code, e.target.value)}
+                    className="w-full px-2.5 py-2 border border-line rounded text-sm"
+                  />
+                )}
+              </div>
             </div>
           )
         })}
       </div>
 
       {/* Methodology & statements */}
-      <div className="bg-white border border-line rounded-md p-6">
+      <div className="bg-white border border-line rounded-md p-4 md:p-6">
         <h3 className="font-display text-[15px] font-semibold text-navy mb-1">
           Methodology & Audit Assurance Statements
         </h3>
@@ -283,7 +335,7 @@ export default function AuditSetup({ audit, setAudit, scope, setScope, clauses, 
         </div>
 
         <Field label="Audit Methodology">
-          <div className="flex gap-2.5">
+          <div className="flex gap-2.5 flex-wrap">
             {METHODS.map((m) => (
               <div
                 key={m.key}
