@@ -1,10 +1,37 @@
-# AuditPro — ISO Audit Management (My Audits: Grouping, Sorting, Reordering)
+# AuditPro — ISO Audit Management (Installable PWA — Step 1 of 2)
 
-Standalone app for SentinelPro Consultants. This pass reworks the My Audits
-list: grouped by Company → Standard, sortable, collapsible, with manual
-reordering.
+Standalone app for SentinelPro Consultants. This pass makes AuditPro a
+proper installable PWA. **This is Step 1 of the mobile/offline work — see
+below for what's still to come.**
 
-## New in this pass: My Audits grouping/sorting/reordering
+## New in this pass: Installable PWA
+
+- **Home-screen install** — on Android (Chrome) you'll see an "Install" /
+  "Add to Home Screen" prompt automatically; on iPhone (Safari), use
+  Share → "Add to Home Screen" manually (iOS doesn't offer an automatic
+  prompt for PWAs the way Android does).
+- Opens **full-screen**, no browser address bar, with the app's navy/gold
+  branding as the icon.
+- **The app's interface itself now loads even with zero signal** — the
+  built JS/CSS/HTML shell is precached by a service worker, so opening the
+  installed app in a dead zone shows the real interface, not a blank page
+  or browser error.
+
+### Important — what this does NOT yet do
+
+This step makes the **app shell** installable and offline-loadable. It does
+**not** yet make **audit data** (checklist entries, evidence photos, saving)
+work without a connection — those still require live Supabase access, same
+as before. If you open the app with no signal, the interface loads, but
+trying to open/save an audit will still fail until you have a connection.
+
+**Step 2 (separate, larger build)**: local-first data storage — checklist
+entries and photos save to the device even offline, then sync to Supabase
+automatically once back online. This touches how the app reads/writes data
+almost everywhere, so it's being built as its own dedicated step rather than
+rushed in alongside this one.
+
+## What's built (from earlier passes)
 
 - **Grouped by Company, then by Standard** — audits nest under their
   company, then under the standard they were audited against, matching your
