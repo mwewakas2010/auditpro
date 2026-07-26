@@ -76,6 +76,10 @@ export default function AuditEditor({ auditId, onBack }) {
   const [saveMsg, setSaveMsg] = useState('')
 
   const clauses = useMemo(() => getClauses(audit.standard), [audit.standard])
+  const inScopeClauses = useMemo(
+    () => clauses.filter((c) => scope?.[c.clause_code]?.inScope !== false),
+    [clauses, scope]
+  )
   const standardInfo = useMemo(() => getStandardInfo(audit.standard), [audit.standard])
 
   const handleStandardChange = (newStandard) => {
@@ -109,8 +113,8 @@ export default function AuditEditor({ auditId, onBack }) {
 
   const scheme = useMemo(() => schemeForAuditType(audit.audit_type), [audit.audit_type])
   const completedCount = useMemo(
-    () => Object.values(checklist).filter((c) => c.status).length,
-    [checklist]
+    () => inScopeClauses.filter((c) => checklist[c.clause_code]?.status).length,
+    [inScopeClauses, checklist]
   )
 
   const handleSave = async () => {
@@ -151,7 +155,7 @@ export default function AuditEditor({ auditId, onBack }) {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <div className="w-[230px] flex-shrink-0 bg-navy text-slate-100 flex flex-col">
         <div className="px-[22px] pt-[26px] pb-[18px] border-b border-white/10">
           <div className="font-display font-bold text-2xl text-white">AuditPro</div>
@@ -186,7 +190,7 @@ export default function AuditEditor({ auditId, onBack }) {
         </div>
       </div>
 
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col">
         <div className="bg-white border-b border-line px-8 py-4 flex justify-between items-center">
           <div>
             <button
@@ -203,12 +207,12 @@ export default function AuditEditor({ auditId, onBack }) {
           <div className="flex items-center gap-4">
             <div className="text-right">
               <div className="font-mono text-[11.5px] text-inksoft">
-                {completedCount} of {clauses.length} clauses complete
+                {completedCount} of {inScopeClauses.length} clauses complete
               </div>
               <div className="w-40 h-1.5 bg-line rounded-full overflow-hidden mt-1">
                 <div
                   className="h-full bg-gold"
-                  style={{ width: `${(completedCount / clauses.length) * 100}%` }}
+                  style={{ width: `${(completedCount / inScopeClauses.length) * 100}%` }}
                 />
               </div>
             </div>
@@ -244,11 +248,11 @@ export default function AuditEditor({ auditId, onBack }) {
               auditType={audit.audit_type}
               checklist={checklist}
               setChecklist={setChecklist}
-              clauses={clauses}
+              clauses={inScopeClauses}
               standardLabel={standardInfo.label}
             />
           )}
-          {activeTab === 'findings' && <Findings scheme={scheme} checklist={checklist} clauses={clauses} />}
+          {activeTab === 'findings' && <Findings scheme={scheme} checklist={checklist} clauses={inScopeClauses} />}
           {activeTab === 'report' && (
             <ReportSignoff
               audit={audit}
