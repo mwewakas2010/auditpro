@@ -21,10 +21,17 @@ export async function uploadDataUrl(bucket, path, dataUrl) {
 export async function listAudits() {
   const { data, error } = await supabase
     .from('audits')
-    .select('id, client_name, department, standard, audit_type, start_date, status, updated_at')
-    .order('updated_at', { ascending: false })
+    .select(
+      'id, client_name, department, standard, audit_type, start_date, status, updated_at, created_at, sort_order, company_id, companies(name)'
+    )
+    .order('created_at', { ascending: false })
   if (error) throw error
   return data
+}
+
+export async function setAuditSortOrder(auditId, sortOrder) {
+  const { error } = await supabase.from('audits').update({ sort_order: sortOrder }).eq('id', auditId)
+  if (error) throw error
 }
 
 export async function deleteAudit(auditId) {

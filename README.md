@@ -1,9 +1,38 @@
-# AuditPro — ISO Audit Management (Consolidated Company Reports)
+# AuditPro — ISO Audit Management (My Audits: Grouping, Sorting, Reordering)
 
-Standalone app for SentinelPro Consultants. This pass adds consolidated
-company reporting on top of the Company/Department foundation.
+Standalone app for SentinelPro Consultants. This pass reworks the My Audits
+list: grouped by Company → Standard, sortable, collapsible, with manual
+reordering.
 
-## New in this pass: Consolidated Company Report
+## New in this pass: My Audits grouping/sorting/reordering
+
+- **Grouped by Company, then by Standard** — audits nest under their
+  company, then under the standard they were audited against, matching your
+  requested hierarchy.
+- **Company sections are collapsible** — click a company header to
+  expand/collapse it.
+- **Sort control** (top right of My Audits) — four modes:
+  - Newest created first (default)
+  - Oldest created first
+  - Standard (A–Z)
+  - Custom order
+- **Custom order + manual reordering**: switch to "Custom order" and ↑/↓
+  arrows appear on each audit row within its group, letting you move it
+  up or down. I built this with simple up/down buttons rather than full
+  drag-and-drop — same practical result, much more reliable to implement
+  well. If you'd rather have true drag-and-drop later, that's a bigger
+  addition we can do as its own step.
+- Audits with no company linked yet show up under an "Unassigned" group at
+  the end (shouldn't happen for anything created after the Company model
+  was added, but covers any edge cases).
+
+### Required migration
+
+Run `supabase/migration_003_audit_sort_order.sql` in the Supabase SQL
+editor — it only adds one column (`sort_order`) to `audits`, safe on
+existing data, nothing gets dropped.
+
+## What's built (from earlier passes)
 
 - In **Manage Companies**, expand any company and click **"📄 Build
   Consolidated Report"**.
