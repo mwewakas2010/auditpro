@@ -54,6 +54,25 @@ export async function createDepartment(companyId, name) {
   return data.id
 }
 
+export async function getCompanyAuditsSummary(companyId) {
+  const { data, error } = await supabase
+    .from('audits')
+    .select('id, standard, audit_type, start_date, end_date, conclusion, status, lead_auditor, department_id, company_departments(name)')
+    .eq('company_id', companyId)
+    .order('start_date', { ascending: true })
+  if (error) throw error
+  return data
+}
+
+export async function getAuditFindingsForReport(auditId) {
+  const { data, error } = await supabase
+    .from('checklist_entries')
+    .select('clause_code, status, evidence_text, evidence_available, follow_up_flag')
+    .eq('audit_id', auditId)
+  if (error) throw error
+  return data
+}
+
 export async function deleteDepartment(departmentId) {
   const { error } = await supabase.from('company_departments').delete().eq('id', departmentId)
   if (error) throw error

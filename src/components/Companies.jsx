@@ -7,7 +7,10 @@ import {
   deleteCompany,
   createDepartment,
   deleteDepartment,
+  getCompanyAuditsSummary,
+  getAuditFindingsForReport,
 } from '../lib/companyRepo'
+import { generateConsolidatedReport } from '../utils/consolidatedReport'
 
 export default function Companies({ onBack }) {
   const [companies, setCompanies] = useState([])
@@ -18,6 +21,47 @@ export default function Companies({ onBack }) {
   const [newCompanyLogo, setNewCompanyLogo] = useState(null)
   const [newDeptName, setNewDeptName] = useState({})
   const [showNewCompany, setShowNewCompany] = useState(false)
+
+  const [reportPanelFor, setReportPanelFor] = useState(null)
+  const [reportAudits, setReportAudits] = useState([])
+  const [selectedAuditIds, setSelectedAuditIds] = useState(new Set())
+  const [reportLoading, setReportLoading] = useState(false)
+  const [generating, setGenerating] = useState(false)
+
+  const openReportPanel = async (company) => {
+    setReportPanelFor(company.id)
+    setReportLoading(true)
+    try {
+      const audits = await getCompanyAuditsSummary(company.id)
+      setReportAudits(audits)
+      // default to pre-selecting only Final audits, since drafts are still work-in-progress
+      setSelectedAuditIds(new Set(audits.filter((a) => a.status === 'final').map((a) => a.id)))
+    } catch (err) {
+      setError(err.message)
+    }
+    setReportLoading(false)
+  }
+
+  const toggleAuditSelection = (id) => {
+    const next = new Set(selectedAuditIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelectedAuditIds(next)
+  }
+
+  const handleGenerateReport = async (company) => {
+    setGenerating(true)
+    try {
+      const selected = reportAudits.filter((a) => selectedAuditIds.has(a.id))
+      const withFindings = await Promise.all(
+        selected.map(async (a) => ({ ...a, findings: await getAuditFindingsForReport(a.id) }))
+      )
+      await generateConsolidatedReport({ companyName: company.name, companyLogoUrl: company.logo_url, audits: withFindings })
+    } catch (err) {
+      setError(err.message)
+    }
+    setGenerating(false)
+  }
 
   const refresh = async () => {
     setLoading(true)
@@ -228,6 +272,63 @@ export default function Companies({ onBack }) {
                         Add
                       </button>
                     </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-line">
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block text-[11px] font-semibold text-navy2 uppercase tracking-wide">
+                        Consolidated Report
+                      </label>
+                      <button
+                        onClick={() => (reportPanelFor === co.id ? setReportPanelFor(null) : openReportPanel(co))}
+                        className="text-xs px-2.5 py-1 border border-gold text-gold rounded hover:bg-goldsoft"
+                      >
+                        {reportPanelFor === co.id ? 'Close' : '📄 Build Consolidated Report'}
+                      </button>
+                    </div>
+
+                    {reportPanelFor === co.id && (
+                      <div className="bg-white border border-line rounded p-3">
+                        {reportLoading && <div className="text-xs text-inksoft">Loading audits…</div>}
+                        {!reportLoading && reportAudits.length === 0 && (
+                          <div className="text-xs text-inksoft">No audits recorded for this company yet.</div>
+                        )}
+                        {!reportLoading && reportAudits.length > 0 && (
+                          <>
+                            <div className="text-[11px] text-inksoft italic mb-2">
+                              Select which audits to include. Final audits are pre-selected; drafts are not, since
+                              they're still work-in-progress.
+                            </div>
+                            <div className="flex flex-col gap-1 mb-3 max-h-52 overflow-y-auto">
+                              {reportAudits.map((a) => (
+                                <label key={a.id} className="flex items-center gap-2 text-xs py-1 border-b border-line">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedAuditIds.has(a.id)}
+                                    onChange={() => toggleAuditSelection(a.id)}
+                                  />
+                                  <span className="font-mono">{a.start_date || 'No date'}</span>
+                                  <span>{a.company_departments?.name || (Array.isArray(a.company_departments) ? a.company_departments[0]?.name : '') || 'No dept'}</span>
+                                  <span className="text-inksoft">{a.standard}</span>
+                                  <span className={`ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                                    a.status === 'final' ? 'bg-conformbg text-conform' : 'bg-nabg text-na'
+                                  }`}>
+                                    {a.status === 'final' ? 'Final' : a.status === 'draft_issued' ? 'Draft' : 'In Progress'}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                            <button
+                              onClick={() => handleGenerateReport(co)}
+                              disabled={generating || selectedAuditIds.size === 0}
+                              className="bg-navy text-white px-3 py-1.5 rounded text-xs disabled:opacity-40"
+                            >
+                              {generating ? 'Generating…' : `Generate PDF (${selectedAuditIds.size} audit${selectedAuditIds.size === 1 ? '' : 's'})`}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-line flex justify-between items-center">

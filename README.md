@@ -1,10 +1,33 @@
-# AuditPro — ISO Audit Management (Company/Department model)
+# AuditPro — ISO Audit Management (Consolidated Company Reports)
 
-Standalone app for SentinelPro Consultants. This pass adds real Company and
-Department records — the foundation for consolidated company reports,
-dashboards, and (later) client login access.
+Standalone app for SentinelPro Consultants. This pass adds consolidated
+company reporting on top of the Company/Department foundation.
 
-## New in this pass: Companies & Departments
+## New in this pass: Consolidated Company Report
+
+- In **Manage Companies**, expand any company and click **"📄 Build
+  Consolidated Report"**.
+- Pick which of that company's audits to include (Final audits are
+  pre-selected; drafts aren't, since they're still work-in-progress — but
+  you can include anything).
+- Generates one PDF covering multiple audits/departments/standards:
+  - **Cover** — company logo, list of audits included (date, department,
+    standard, type, conclusion, status)
+  - **Executive summary** — aggregate conformance/NC/OFI counts across every
+    selected audit
+  - **Recurring Nonconformities** — clauses that show up as a nonconformity
+    in more than one audit, called out specifically. This is the genuinely
+    valuable bit for a repeat client — it surfaces systemic issues that a
+    single-audit report would never show.
+  - **Per-audit detailed findings** — one section per audit, each showing
+    its own nonconformities and OFIs, correctly using that audit's own
+    standard's clause library (since departments can be audited against
+    different standards).
+- Works across departments and across different standards in the same
+  report — e.g. one department audited against 45001, another against 9001,
+  both showing up correctly labelled in the same consolidated document.
+
+## Company/Department Foundation (previous pass)
 
 - **"Manage Companies"** — new screen, linked from My Audits. Create a
   company (name + logo — the logo now lives here, not per-audit), add
