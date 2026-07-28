@@ -1,10 +1,58 @@
-# AuditPro — ISO Audit Management (Offline Data Sync — Step 2 of 2)
+# AuditPro — ISO Audit Management (Subscriber Orgs — First Slice)
 
-Standalone app for SentinelPro Consultants. This pass adds the offline
-**data** layer on top of last pass's installable PWA shell — the real
-field-use capability.
+Standalone app for SentinelPro Consultants. This pass adds the first slice
+of a second product mode: self-service subscriber organizations, alongside
+your existing consultant workflow (which is completely unchanged).
 
-## New in this pass: Offline data sync
+## New in this pass: Subscriber organizations (first slice)
+
+**Two account types now exist, sharing the same app:**
+- **Consultant account (yours)** — exactly as before: Dashboard, My Audits,
+  Manage Companies, full multi-client audit workflow. Nothing about how you
+  use it has changed.
+- **Subscriber organizations (new)** — a small organization signs up
+  themselves, gets their own account, and runs their own internal
+  audits/inspections using the existing ISO checklists — no consultant
+  involvement, no "Companies" concept (the org *is* the entity auditing
+  itself).
+
+**What's included in this first slice:**
+- Public sign-up (new "Sign up" link on the login screen) — creates a user
+  account and an Organization in one step
+- A simplified "Subscriber Shell" — just My Audits + the audit editor, no
+  Companies/Dashboard analytics clutter
+- Reuses all existing ISO 9001/14001/45001 checklists, the same PDF report
+  generator, the same offline sync — all of it, unchanged
+- Report branding automatically uses the organization's own name instead of
+  "SentinelPro Consultants" for subscriber-mode reports
+
+**Explicitly NOT in this first slice (deferred, as planned):**
+- No billing/Stripe — sign-up is currently free
+- No team invites — one user per organization for now (the person who signs
+  up is that org's only member)
+- No new checklist types beyond the existing three ISO standards
+- No custom/build-your-own checklists
+
+### Required migration
+
+Run `supabase/migration_004_organizations.sql` in the Supabase SQL editor.
+Additive only — creates `organizations` and `organization_members` tables,
+adds an `organization_id` column to `audits`, and extends the existing RLS
+policies to allow organization-member access **in addition to** the
+existing owner-based access. Your consultant account's behavior is
+completely unaffected — it has no organization membership, so none of the
+new logic applies to it.
+
+### A known rough edge worth knowing about
+
+New sign-ups go through Supabase's default email confirmation flow, which
+uses Supabase's built-in (rate-limited, generically-branded) transactional
+email sender. Fine for testing with a handful of sign-ups, but if you start
+getting real subscribers, configuring a custom SMTP provider in Supabase
+(Settings → Auth → SMTP Settings) will be worth doing for reliable,
+properly-branded delivery — not built in this pass.
+
+## What's built (from earlier passes)
 
 **What works offline now:**
 - Once you've opened an audit while online, you can keep editing it —

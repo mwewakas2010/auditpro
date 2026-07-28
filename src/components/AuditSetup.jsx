@@ -31,7 +31,7 @@ function Field({ label, children }) {
 const inputCls =
   'w-full px-2.5 py-2 border border-line rounded text-[13.5px] bg-[#FCFBF8] text-ink focus:outline focus:outline-2 focus:outline-gold'
 
-export default function AuditSetup({ audit, setAudit, scope, setScope, clauses, onStandardChange }) {
+export default function AuditSetup({ audit, setAudit, scope, setScope, clauses, onStandardChange, mode = 'consultant' }) {
   const update = (key) => (e) => setAudit({ ...audit, [key]: e.target.value })
   const [companies, setCompanies] = useState([])
   const [companiesError, setCompaniesError] = useState('')
@@ -168,45 +168,56 @@ export default function AuditSetup({ audit, setAudit, scope, setScope, clauses, 
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="Company / Client">
-            <select className={inputCls} value={audit.company_id || ''} onChange={handleCompanyChange}>
-              <option value="" disabled>Select a company…</option>
-              {companies.map((co) => (
-                <option key={co.id} value={co.id}>{co.name}</option>
-              ))}
-              <option value="__new__">+ New company…</option>
-            </select>
-          </Field>
-          <Field label="Client Logo">
-            <div className="border-[1.5px] border-line rounded-md p-3 flex items-center gap-3 bg-[#FCFBF8]">
-              {audit.logo_url ? (
-                <img src={audit.logo_url} alt="Client logo" className="h-10 object-contain" />
-              ) : (
-                <span className="text-[12px] text-inksoft">No logo set for this company yet.</span>
-              )}
-            </div>
-            <div className="text-[10.5px] text-inksoft italic mt-1">
-              Logos are managed per company now, not per audit — go to "Manage Companies" from My Audits to upload
-              or change one, and it applies to every audit for that client.
-            </div>
-          </Field>
-        </div>
+        {mode === 'consultant' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Company / Client">
+              <select className={inputCls} value={audit.company_id || ''} onChange={handleCompanyChange}>
+                <option value="" disabled>Select a company…</option>
+                {companies.map((co) => (
+                  <option key={co.id} value={co.id}>{co.name}</option>
+                ))}
+                <option value="__new__">+ New company…</option>
+              </select>
+            </Field>
+            <Field label="Client Logo">
+              <div className="border-[1.5px] border-line rounded-md p-3 flex items-center gap-3 bg-[#FCFBF8]">
+                {audit.logo_url ? (
+                  <img src={audit.logo_url} alt="Client logo" className="h-10 object-contain" />
+                ) : (
+                  <span className="text-[12px] text-inksoft">No logo set for this company yet.</span>
+                )}
+              </div>
+              <div className="text-[10.5px] text-inksoft italic mt-1">
+                Logos are managed per company now, not per audit — go to "Manage Companies" from My Audits to upload
+                or change one, and it applies to every audit for that client.
+              </div>
+            </Field>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Department / Section">
-            <select
-              className={inputCls}
-              value={audit.department_id || ''}
-              onChange={handleDepartmentChange}
-              disabled={!audit.company_id}
-            >
-              <option value="" disabled>{audit.company_id ? 'Select a department…' : 'Select a company first'}</option>
-              {(selectedCompany?.company_departments || []).map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-              {audit.company_id && <option value="__new__">+ New department…</option>}
-            </select>
+            {mode === 'consultant' ? (
+              <select
+                className={inputCls}
+                value={audit.department_id || ''}
+                onChange={handleDepartmentChange}
+                disabled={!audit.company_id}
+              >
+                <option value="" disabled>{audit.company_id ? 'Select a department…' : 'Select a company first'}</option>
+                {(selectedCompany?.company_departments || []).map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+                {audit.company_id && <option value="__new__">+ New department…</option>}
+              </select>
+            ) : (
+              <input
+                className={inputCls}
+                value={audit.department}
+                onChange={update('department')}
+                placeholder="e.g. Warehouse Operations"
+              />
+            )}
           </Field>
           <Field label="Process Owner">
             <input className={inputCls} value={audit.process_owner} onChange={update('process_owner')} />

@@ -22,7 +22,7 @@ function getDB() {
 // Saves the full working state of an audit under a local key. Called
 // automatically as the auditor works, regardless of online/offline status,
 // so nothing is ever lost if the tab closes or signal drops mid-edit.
-export async function saveLocalAudit(localId, { audit, scope, checklist, signoffs, pendingSync }) {
+export async function saveLocalAudit(localId, { audit, scope, checklist, signoffs, pendingSync, organizationId }) {
   const db = await getDB()
   await db.put(AUDITS_STORE, {
     localId,
@@ -30,6 +30,7 @@ export async function saveLocalAudit(localId, { audit, scope, checklist, signoff
     scope,
     checklist,
     signoffs,
+    organizationId: organizationId || null,
     pendingSync: !!pendingSync,
     savedAt: new Date().toISOString(),
   })

@@ -67,13 +67,19 @@ function emptyChecklistFor(clauses) {
   return entries
 }
 
-export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved }) {
+export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved, mode = 'consultant', organizationId = null, reportBrandName = null }) {
   const [id, setId] = useState(auditId) // becomes set once a new audit is first saved
   // Stable local storage key: the real audit id if editing an existing one,
   // or a fresh "local-..." id for a brand-new audit that has never touched
   // the server yet. This is what offline edits get queued under.
   const [localId, setLocalId] = useState(() => auditId || `local-${crypto.randomUUID()}`)
-  const [audit, setAudit] = useState(emptyAudit)
+  const [audit, setAudit] = useState(() => {
+    const base = emptyAudit()
+    if (mode === 'subscriber' && !auditId && reportBrandName) {
+      base.client_name = reportBrandName
+    }
+    return base
+  })
   const [scope, setScope] = useState(() => emptyScopeFor(getClauses(emptyAudit().standard)))
   const [checklist, setChecklist] = useState(() => emptyChecklistFor(getClauses(emptyAudit().standard)))
   const [signoffs, setSignoffs] = useState({ lead_auditor: null, auditee_rep: null })
@@ -134,7 +140,7 @@ export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved }
         setSignoffs(result.signoffs)
         // Cache a non-pending copy so this audit can still be opened (and
         // edited offline) even with zero signal next time.
-        await saveLocalAudit(auditId, { audit: result.audit, scope: result.scope, checklist: result.checklist, signoffs: result.signoffs, pendingSync: false })
+        await saveLocalAudit(auditId, { audit: result.audit, scope: result.scope, checklist: result.checklist, signoffs: result.signoffs, pendingSync: false, organizationId })
       } catch (err) {
         // Network load failed - last resort, fall back to any local cache
         // (even a non-pending one) so the audit is still viewable offline.
@@ -163,7 +169,7 @@ export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved }
   useEffect(() => {
     if (!hasInitiallyLoaded.current) return
     const t = setTimeout(() => {
-      saveLocalAudit(localId, { audit, scope, checklist, signoffs, pendingSync: true })
+      saveLocalAudit(localId, { audit, scope, checklist, signoffs, pendingSync: true, organizationId })
     }, 600)
     return () => clearTimeout(t)
   }, [audit, scope, checklist, signoffs, localId])
@@ -206,14 +212,14 @@ export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved }
     if (!online) {
       // Offline: don't even attempt the network call - just make sure the
       // local safety-net copy is current and clearly marked as pending.
-      await saveLocalAudit(localId, { audit, scope, checklist, signoffs, pendingSync: true })
+      await saveLocalAudit(localId, { audit, scope, checklist, signoffs, pendingSync: true, organizationId })
       setSaveMsg('📴 Offline — saved on this device. Will sync automatically once you\'re back online.')
       setSaving(false)
       return
     }
 
     try {
-      const savedId = await saveAudit({ auditId: id, audit, scope, checklist, signoffs })
+      const savedId = await saveAudit({ auditId: id, audit, scope, checklist, signoffs, organizationId })
       // If this was a brand-new audit (previously only a local-... id),
       // migrate the local cache entry to the real server id.
       if (localId !== savedId) {
@@ -229,12 +235,12 @@ export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved }
       setScope(result.scope)
       setChecklist(result.checklist)
       setSignoffs(result.signoffs)
-      await saveLocalAudit(savedId, { audit: result.audit, scope: result.scope, checklist: result.checklist, signoffs: result.signoffs, pendingSync: false })
+      await saveLocalAudit(savedId, { audit: result.audit, scope: result.scope, checklist: result.checklist, signoffs: result.signoffs, pendingSync: false, organizationId })
       setSaveMsg('Saved ' + new Date().toLocaleTimeString())
     } catch (err) {
       // The network call itself failed (e.g. connection dropped mid-save) -
       // fall back to the same offline-safe local save rather than losing work.
-      await saveLocalAudit(localId, { audit, scope, checklist, signoffs, pendingSync: true })
+      await saveLocalAudit(localId, { audit, scope, checklist, signoffs, pendingSync: true, organizationId })
       setSaveMsg('Could not reach the server — saved on this device instead. Will retry automatically once back online.')
     }
     setSaving(false)
@@ -319,6 +325,7 @@ export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved }
             setScope={setScope}
             clauses={clauses}
             onStandardChange={handleStandardChange}
+            mode={mode}
           />
         )}
         {activeTab === 'checklist' && (
@@ -341,6 +348,7 @@ export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved }
             checklist={checklist}
             scope={scope}
             clauses={clauses}
+            reportBrandName={reportBrandName}
           />
         )}
       </div>

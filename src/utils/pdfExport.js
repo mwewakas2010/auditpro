@@ -89,7 +89,7 @@ function imageFormat(src) {
   return 'JPEG'
 }
 
-function footer(doc, standardLabel) {
+function footer(doc, standardLabel, brandName) {
   const pageCount = doc.internal.getNumberOfPages()
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i)
@@ -98,7 +98,7 @@ function footer(doc, standardLabel) {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
     doc.setTextColor(...INK_SOFT)
-    doc.text(`SentinelPro Consultants — ${standardLabel} Audit Report`, MARGIN, PAGE_H - 9)
+    doc.text(`${brandName} — ${standardLabel} Audit Report`, MARGIN, PAGE_H - 9)
     doc.text(`Page ${i} of ${pageCount}`, PAGE_W - MARGIN, PAGE_H - 9, { align: 'right' })
   }
 }
@@ -182,7 +182,7 @@ async function addPhotoAppendix(doc, scopedClauses, checklist) {
   }
 }
 
-export async function generateAuditPdf({ audit, signoffs, checklist, scope, clauses }) {
+export async function generateAuditPdf({ audit, signoffs, checklist, scope, clauses, reportBrandName }) {
   const standardInfo = getStandardInfo(audit.standard)
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
 
@@ -472,7 +472,7 @@ export async function generateAuditPdf({ audit, signoffs, checklist, scope, clau
 
   await addPhotoAppendix(doc, allScopedClauses, checklist)
 
-  footer(doc, standardInfo.label)
+  footer(doc, standardInfo.label, reportBrandName || 'SentinelPro Consultants')
   const standardSlug = audit.standard.replace(/[^A-Za-z0-9]+/g, '')
   doc.save(`${(audit.client_name || 'audit').replace(/\s+/g, '_')}_${standardSlug}_Report_${audit.status === 'final' ? 'FINAL' : 'DRAFT'}.pdf`)
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 
-export default function Login() {
+export default function Login({ onSwitchToSignup }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -50,8 +50,15 @@ export default function Login() {
           {loading ? 'Signing in…' : 'Sign in'}
         </button>
 
-        <div className="text-[11px] text-inksoft mt-4 text-center">
-          Accounts are created in the Supabase dashboard, not here — see README.
+        <button
+          type="button"
+          onClick={onSwitchToSignup}
+          className="w-full text-xs text-navy2 mt-4 text-center"
+        >
+          New organization? Sign up
+        </button>
+        <div className="text-[11px] text-inksoft mt-3 text-center">
+          SentinelPro consultant accounts are created in the Supabase dashboard.
         </div>
       </form>
     </div>

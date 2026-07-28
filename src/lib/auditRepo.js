@@ -82,6 +82,7 @@ export async function loadAudit(auditId) {
     id: auditRow.id,
     client_name: currentCompany?.name || auditRow.client_name || '',
     company_id: auditRow.company_id || null,
+    organization_id: auditRow.organization_id || null,
     department_id: auditRow.department_id || null,
     logo_url: currentCompany?.logo_url || auditRow.logo_url || null,
     standard: auditRow.standard || 'ISO 45001:2018',
@@ -147,12 +148,13 @@ export async function loadAudit(auditId) {
 
 // ---------- Save (insert or update) ----------
 
-export async function saveAudit({ auditId, audit, scope, checklist, signoffs }) {
+export async function saveAudit({ auditId, audit, scope, checklist, signoffs, organizationId = null }) {
   const { data: userData } = await supabase.auth.getUser()
   const owner = userData?.user?.id
 
   const auditPayload = {
     owner,
+    organization_id: organizationId || null,
     client_name: audit.client_name,
     company_id: audit.company_id || null,
     department_id: audit.department_id || null,
@@ -288,6 +290,7 @@ export async function syncPendingAudits() {
         scope: entry.scope,
         checklist: entry.checklist,
         signoffs: entry.signoffs,
+        organizationId: entry.organizationId,
       })
       await deleteLocalAudit(entry.localId)
       synced.push({ localId: entry.localId, realId })

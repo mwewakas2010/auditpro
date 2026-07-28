@@ -22,7 +22,7 @@ function conclusionOptions(policyName) {
   ]
 }
 
-export default function ReportSignoff({ audit, setAudit, signoffs, setSignoffs, checklist, scope, clauses }) {
+export default function ReportSignoff({ audit, setAudit, signoffs, setSignoffs, checklist, scope, clauses, reportBrandName }) {
   const CONCLUSIONS = conclusionOptions(getStandardInfo(audit.standard).system.replace(' Management System', '').toLowerCase())
   const [reviewState, setReviewState] = useState({ loading: false, issues: null, rawFallback: null, error: null })
 
@@ -183,7 +183,7 @@ export default function ReportSignoff({ audit, setAudit, signoffs, setSignoffs, 
       <div className="flex flex-col md:flex-row gap-3">
         <button
           className="bg-navy text-white px-5.5 py-2.5 rounded font-medium text-[13.5px] w-full md:w-auto"
-          onClick={async () => await generateAuditPdf({ audit, signoffs, checklist, scope, clauses })}
+          onClick={async () => await generateAuditPdf({ audit, signoffs, checklist, scope, clauses, reportBrandName })}
         >
           Export Draft PDF
         </button>
