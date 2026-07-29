@@ -237,6 +237,7 @@ export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved, 
       setSignoffs(result.signoffs)
       await saveLocalAudit(savedId, { audit: result.audit, scope: result.scope, checklist: result.checklist, signoffs: result.signoffs, pendingSync: false, organizationId })
       setSaveMsg('Saved ' + new Date().toLocaleTimeString())
+      setOfflineLoaded(false)
     } catch (err) {
       // Always keep the local safety-net copy either way - never lose work.
       await saveLocalAudit(localId, { audit, scope, checklist, signoffs, pendingSync: true, organizationId })

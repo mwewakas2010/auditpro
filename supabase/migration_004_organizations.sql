@@ -38,8 +38,15 @@ create policy "Anyone authenticated can create an org" on organizations for inse
   with check (auth.uid() = created_by);
 
 drop policy if exists "Members can view membership rows for their org" on organization_members;
-create policy "Members can view membership rows for their org" on organization_members for select
-  using (exists (select 1 from organization_members om2 where om2.organization_id = organization_members.organization_id and om2.user_id = auth.uid()));
+-- IMPORTANT: this must NOT query organization_members from within its own
+-- policy (a self-join here causes "infinite recursion detected in policy" -
+-- Postgres has to re-evaluate this same policy to evaluate the subquery).
+-- For this first slice, each user only ever needs to see their own
+-- membership row (to look up which org they belong to), so a direct check
+-- is both correct and safe. If team member lists are added later, that
+-- would need a SECURITY DEFINER helper function instead of a plain policy.
+create policy "Users can view their own membership" on organization_members for select
+  using (user_id = auth.uid());
 
 drop policy if exists "Users can insert their own membership" on organization_members;
 create policy "Users can insert their own membership" on organization_members for insert
