@@ -238,10 +238,22 @@ export default function AuditEditor({ auditId, activeTab, onExit, onAuditSaved, 
       await saveLocalAudit(savedId, { audit: result.audit, scope: result.scope, checklist: result.checklist, signoffs: result.signoffs, pendingSync: false, organizationId })
       setSaveMsg('Saved ' + new Date().toLocaleTimeString())
     } catch (err) {
-      // The network call itself failed (e.g. connection dropped mid-save) -
-      // fall back to the same offline-safe local save rather than losing work.
+      // Always keep the local safety-net copy either way - never lose work.
       await saveLocalAudit(localId, { audit, scope, checklist, signoffs, pendingSync: true, organizationId })
-      setSaveMsg('Could not reach the server — saved on this device instead. Will retry automatically once back online.')
+
+      const looksLikeNetworkFailure =
+        !online ||
+        err.name === 'TypeError' ||
+        /fetch|network/i.test(err.message || '')
+
+      if (looksLikeNetworkFailure) {
+        setSaveMsg('Could not reach the server — saved on this device instead. Will retry automatically once back online.')
+      } else {
+        // A real error came back from the server (permissions, invalid data,
+        // etc.) - show it plainly rather than mislabeling it as offline.
+        // The local copy is still safe, but this needs actual attention.
+        setSaveMsg(`Error: ${err.message || 'Save was rejected by the server.'} (Your work is still saved on this device.)`)
+      }
     }
     setSaving(false)
   }
