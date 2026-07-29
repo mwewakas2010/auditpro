@@ -1,10 +1,61 @@
-# AuditPro — ISO Audit Management (Subscriber Orgs — First Slice)
+# AuditPro — ISO Audit Management (Billing: Trial & Gating — Slice 1 of 2)
 
-Standalone app for SentinelPro Consultants. This pass adds the first slice
-of a second product mode: self-service subscriber organizations, alongside
-your existing consultant workflow (which is completely unchanged).
+Standalone app for SentinelPro Consultants. This pass adds trial tracking
+and access gating for subscriber organizations. **Real payment processing
+via Flutterwave is a separate, next pass** — see below.
 
-## New in this pass: Subscriber organizations (first slice)
+## New in this pass: Trial tracking & access gating
+
+- Every new organization gets a **30-day free trial** automatically on
+  sign-up.
+- A trial countdown banner shows in the sidebar (and mobile top bar) once
+  access is active.
+- When the trial expires, the organization is switched to **read-only via
+  the Billing screen** — they can't create or edit audits until choosing a
+  plan, but nothing about their existing data is touched or lost.
+- A **Billing & Plans** screen (new permanent nav item) shows the three
+  proposed tiers — Starter, Growth, Pro — each with monthly/annual pricing
+  in ZMW. The pricing shown is a starting proposal, easy to adjust later.
+- The subscribe buttons are intentionally disabled right now (**"coming
+  soon"**) — this pass is the state machine and gating logic only; actual
+  checkout is next.
+- Also modeled (state machine ready, no live trigger yet): a **past_due**
+  status with a 7-day grace period after a failed/cancelled payment, before
+  restricting access the same way trial expiry does.
+
+### How to test the gating without waiting 30 days
+
+In Supabase → Table Editor → `organizations`, you can manually edit a test
+org's row to simulate any state:
+- Set `trial_ends_at` to a date in the past → simulates trial expiry
+- Set `subscription_status` to `'active'` → simulates a paying customer
+- Set `subscription_status` to `'past_due'` and `grace_period_ends_at` to a
+  future/past date → simulates the grace-period behavior
+
+### Required migration
+
+Run `supabase/migration_005_billing.sql` — additive only, adds the new
+subscription/trial columns to `organizations`. Existing organizations
+(including any test orgs from earlier passes) get a fresh 30-day trial
+window starting from when you run it, so nobody gets abruptly cut off.
+
+## Important context for the next pass (real payment)
+
+**Stripe was ruled out** — it doesn't support payouts to a Zambian bank
+account (its African coverage, inherited from acquiring Paystack, only
+covers Ghana, Kenya, Nigeria, South Africa, and Côte d'Ivoire). **Flutterwave**
+is the planned provider instead — it holds an actual Bank of Zambia payment
+system license and supports ZMW payouts directly.
+
+One real limitation to know about going in: Flutterwave's automatic
+recurring billing (auto-charging on schedule without the customer coming
+back) **only works reliably with card payments**, not mobile money — worth
+knowing given how widely mobile money is used in Zambia. Subscribers can
+still pay via mobile money, but true "set-and-forget" renewal is a
+card-specific feature; this will need to be designed around in the next
+pass, not silently overpromised.
+
+## What's built (from earlier passes)
 
 **Two account types now exist, sharing the same app:**
 - **Consultant account (yours)** — exactly as before: Dashboard, My Audits,

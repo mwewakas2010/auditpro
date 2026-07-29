@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { getAccessState } from '../lib/orgRepo'
 import { AUDIT_TABS } from './AuditEditor.jsx'
 import AuditList from './AuditList.jsx'
 import AuditEditor from './AuditEditor.jsx'
+import Billing from './Billing.jsx'
 import {
   ClipboardList,
   FileText,
@@ -11,10 +13,12 @@ import {
   FileCheck2,
   ArrowLeft,
   LogOut,
+  CreditCard,
 } from 'lucide-react'
 
 const APP_NAV = [
   { key: 'audits', label: 'My Audits', icon: ClipboardList },
+  { key: 'billing', label: 'Billing & Plans', icon: CreditCard },
 ]
 
 const AUDIT_TAB_MOBILE = {
@@ -25,10 +29,17 @@ const AUDIT_TAB_MOBILE = {
 }
 
 export default function SubscriberShell({ organization }) {
-  const [section, setSection] = useState('audits') // 'audits' | 'editor'
+  const [section, setSection] = useState('audits') // 'audits' | 'editor' | 'billing'
   const [auditId, setAuditId] = useState(null)
   const [auditTab, setAuditTab] = useState('setup')
   const [editorKey, setEditorKey] = useState(0)
+
+  const accessState = getAccessState(organization)
+  // If access is restricted (trial expired, payment failed past grace, or
+  // canceled), the Billing screen is the ONLY thing shown, regardless of
+  // which nav item was clicked - existing data is untouched, just not
+  // editable until a plan is chosen.
+  const effectiveSection = accessState.access === 'restricted' ? 'billing' : section
 
   const goToSection = (key) => {
     setSection(key)
@@ -48,7 +59,7 @@ export default function SubscriberShell({ organization }) {
     <div className="flex flex-col md:flex-row h-screen overflow-hidden">
       {/* Mobile top bar */}
       <div className="md:hidden bg-navy text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
-        {section === 'editor' ? (
+        {effectiveSection === 'editor' ? (
           <>
             <button onClick={() => goToSection('audits')} className="flex items-center gap-1.5 text-sm">
               <ArrowLeft size={18} /> My Audits
@@ -64,6 +75,13 @@ export default function SubscriberShell({ organization }) {
           </>
         )}
       </div>
+      {accessState.access === 'full' && (accessState.trialDaysLeft !== undefined || accessState.graceDaysLeft !== undefined) && (
+        <div className="md:hidden bg-minorbg text-minor text-[11px] px-4 py-1.5 text-center flex-shrink-0">
+          {accessState.trialDaysLeft !== undefined
+            ? `Trial: ${accessState.trialDaysLeft} day(s) left`
+            : `Payment failed — ${accessState.graceDaysLeft} day(s) to fix`}
+        </div>
+      )}
 
       {/* Desktop sidebar */}
       <div className="hidden md:flex w-[230px] flex-shrink-0 bg-navy text-slate-100 flex-col">
@@ -74,23 +92,31 @@ export default function SubscriberShell({ organization }) {
           </div>
         </div>
 
+        {accessState.access === 'full' && (accessState.trialDaysLeft !== undefined || accessState.graceDaysLeft !== undefined) && (
+          <div className="px-[22px] py-2 bg-white/5 text-[11px] text-[#E8D08A] border-b border-white/10">
+            {accessState.trialDaysLeft !== undefined
+              ? `Trial: ${accessState.trialDaysLeft} day${accessState.trialDaysLeft === 1 ? '' : 's'} left`
+              : `Payment failed — ${accessState.graceDaysLeft} day${accessState.graceDaysLeft === 1 ? '' : 's'} to fix`}
+          </div>
+        )}
+
         <div className="py-3.5">
           {APP_NAV.map((item) => (
             <div
               key={item.key}
               onClick={() => goToSection(item.key)}
-              className={`px-[22px] py-[13px] text-sm cursor-pointer border-l-[3px] transition-colors ${
-                section === item.key
+              className={`px-[22px] py-[13px] text-sm cursor-pointer border-l-[3px] transition-colors flex items-center gap-2 ${
+                effectiveSection === item.key
                   ? 'bg-white/10 border-gold text-white'
                   : 'border-transparent text-[#C7CEDA] hover:bg-white/5'
               }`}
             >
-              {item.label}
+              <item.icon size={15} /> {item.label}
             </div>
           ))}
         </div>
 
-        {section === 'editor' && (
+        {effectiveSection === 'editor' && (
           <>
             <div className="px-[22px] pt-3 pb-1.5 text-[10px] uppercase tracking-wide text-[#7E8CA3] border-t border-white/10">
               Current Audit
@@ -128,8 +154,9 @@ export default function SubscriberShell({ organization }) {
 
       {/* Main content */}
       <div className="flex-1 min-w-0 overflow-y-auto pb-16 md:pb-0">
-        {section === 'audits' && <AuditList onOpen={openAudit} onNew={newAudit} />}
-        {section === 'editor' && (
+        {effectiveSection === 'audits' && <AuditList onOpen={openAudit} onNew={newAudit} />}
+        {effectiveSection === 'billing' && <Billing organization={organization} accessState={accessState} />}
+        {effectiveSection === 'editor' && (
           <AuditEditor
             key={editorKey}
             auditId={auditId}
@@ -145,7 +172,7 @@ export default function SubscriberShell({ organization }) {
 
       {/* Mobile bottom tab bar */}
       <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-navy border-t border-white/10 flex">
-        {section === 'editor'
+        {effectiveSection === 'editor'
           ? AUDIT_TABS.map((tab) => {
               const meta = AUDIT_TAB_MOBILE[tab.key]
               const Icon = meta.icon
@@ -165,7 +192,7 @@ export default function SubscriberShell({ organization }) {
             })
           : APP_NAV.map((item) => {
               const Icon = item.icon
-              const active = section === item.key
+              const active = effectiveSection === item.key
               return (
                 <button
                   key={item.key}
@@ -175,7 +202,7 @@ export default function SubscriberShell({ organization }) {
                   }`}
                 >
                   <Icon size={20} />
-                  {item.label}
+                  {item.label === 'Billing & Plans' ? 'Billing' : item.label}
                 </button>
               )
             })}
