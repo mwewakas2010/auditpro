@@ -39,7 +39,7 @@ export async function loadTemplateStructure(templateId) {
 export async function listCCVs() {
   const { data, error } = await supabase
     .from('ccv_instances')
-    .select('id, location, department, section, date_time, status, created_at, checklist_templates(name)')
+    .select('id, location, department, section, date_time, status, created_at, checklist_templates(name), companies(name)')
     .order('created_at', { ascending: false })
   if (error) throw error
   return data
@@ -59,6 +59,16 @@ export async function loadCCV(id) {
     .eq('id', id)
     .single()
   if (iErr) throw iErr
+
+  let company = null
+  if (instance.company_id) {
+    const { data: companyRow } = await supabase
+      .from('companies')
+      .select('id, name, logo_url')
+      .eq('id', instance.company_id)
+      .maybeSingle()
+    company = companyRow || null
+  }
 
   const { template, categories } = await loadTemplateStructure(instance.template_id)
 
@@ -86,18 +96,19 @@ export async function loadCCV(id) {
     }
   })
 
-  return { instance, template, categories, responses }
+  return { instance, template, categories, responses, company }
 }
 
 // ---------- Save (insert or update) a CCV instance ----------
 
-export async function saveCCV({ ccvId, templateId, meta, responses }) {
+export async function saveCCV({ ccvId, templateId, companyId, meta, responses }) {
   const { data: userData } = await supabase.auth.getUser()
   const owner = userData?.user?.id
 
   const instancePayload = {
     owner,
     template_id: templateId,
+    company_id: companyId || null,
     assessors: meta.assessors,
     date_time: meta.dateTime || null,
     location: meta.location,

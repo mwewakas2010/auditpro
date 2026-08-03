@@ -1,11 +1,29 @@
-# AuditPro — ISO Audit Management (Critical Controls Verification Module)
+# AuditPro — ISO Audit Management (CCV: Company & Logo on Report)
 
-Standalone app for SentinelPro Consultants. This pass adds a genuinely new
-module — **Critical Controls Verification (CCVs)** — sitting alongside the
-ISO audit module, built on a general checklist template system rather than
-as a one-off.
+Standalone app for SentinelPro Consultants. This pass links Critical
+Control Verifications to your existing Companies, so the PDF report shows
+the client name and logo — reusing what's already in Manage Companies.
 
-## New in this pass: Critical Controls Verification (CCVs)
+## New in this pass: Company/logo on CCV reports
+
+- CCV form now has a **Company** dropdown at the top of its metadata,
+  pulling from the same company list used by ISO audits.
+- The company's logo (already uploaded once in Manage Companies) now
+  appears on the CCV's PDF cover, alongside the company name — same reuse
+  pattern as ISO audit reports, no re-uploading needed per CCV.
+- The My CCVs list now shows the linked company name next to each entry.
+- This is a genuine link to the Company record (not a copied snapshot), so
+  if you update a company's logo later, CCV reports generated afterward
+  pick up the new one automatically — consistent with how ISO audits work.
+
+### Required migration
+
+Run `supabase/migration_007_ccv_company.sql` — adds one nullable column
+(`company_id`) to `ccv_instances`. Additive, safe on existing data.
+
+## What's built (from earlier passes)
+
+### Critical Controls Verification (CCVs) module
 
 **A new permanent nav item**, "Critical Controls," separate from My Audits.
 

@@ -91,7 +91,10 @@ export default function CCVList({ onOpen, onNew }) {
             className="bg-white border border-line rounded-md px-4 py-3 flex flex-col md:flex-row justify-between md:items-center gap-2.5 cursor-pointer hover:border-navy2"
           >
             <div>
-              <div className="font-medium text-[14px]">{c.checklist_templates?.name || 'Untitled Template'}</div>
+              <div className="font-medium text-[14px]">
+                {c.checklist_templates?.name || 'Untitled Template'}
+                {c.companies?.name && <span className="text-inksoft font-normal"> — {c.companies.name}</span>}
+              </div>
               <div className="text-xs text-inksoft mt-0.5 font-mono">
                 {c.location || 'No location'} • {c.department || 'No department'} •{' '}
                 {c.date_time ? new Date(c.date_time).toLocaleString() : 'No date set'}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadTemplateStructure, loadCCV, saveCCV } from '../lib/ccvRepo'
+import { listCompanies } from '../lib/companyRepo'
 import { generateCCVPdf } from '../utils/ccvPdfExport'
 import CameraCapture from './CameraCapture.jsx'
 
@@ -13,12 +14,18 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
   const [categories, setCategories] = useState([])
   const [meta, setMeta] = useState(emptyMeta)
   const [responses, setResponses] = useState({})
+  const [companies, setCompanies] = useState([])
+  const [companyId, setCompanyId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
   const [cameraOpenFor, setCameraOpenFor] = useState(null)
   const fileInputs = useRef({})
+
+  useEffect(() => {
+    listCompanies().then(setCompanies).catch(() => {})
+  }, [])
 
   useEffect(() => {
     ;(async () => {
@@ -36,6 +43,7 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
             status: result.instance.status || 'in_progress',
           })
           setResponses(result.responses)
+          setCompanyId(result.instance.company_id || null)
         } else {
           const { template: t, categories: cats } = await loadTemplateStructure(templateId)
           setTemplate(t)
@@ -91,7 +99,7 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
     setSaveMsg('')
     try {
       const newMeta = markFinal ? { ...meta, status: 'final' } : meta
-      const savedId = await saveCCV({ ccvId: id, templateId: template.id, meta: newMeta, responses })
+      const savedId = await saveCCV({ ccvId: id, templateId: template.id, companyId, meta: newMeta, responses })
       setId(savedId)
       setMeta(newMeta)
       const result = await loadCCV(savedId)
@@ -138,7 +146,7 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
           </button>
           {id && (
             <button
-              onClick={() => generateCCVPdf({ template, categories, meta, responses })}
+              onClick={async () => await generateCCVPdf({ template, categories, meta, responses, company: companies.find((c) => c.id === companyId) })}
               className="bg-white text-navy border-[1.5px] border-navy px-4 py-2 rounded text-sm font-medium"
             >
               Export PDF
@@ -154,6 +162,15 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
       )}
 
       <div className="bg-white border border-line rounded-md p-4 md:p-5 mb-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-[11px] font-semibold text-navy2 mb-1.5 uppercase tracking-wide">Company</label>
+          <select className={inputCls} value={companyId || ''} onChange={(e) => setCompanyId(e.target.value || null)}>
+            <option value="">No company selected</option>
+            {companies.map((co) => (
+              <option key={co.id} value={co.id}>{co.name}</option>
+            ))}
+          </select>
+        </div>
         <div>
           <label className="block text-[11px] font-semibold text-navy2 mb-1.5 uppercase tracking-wide">Assessors</label>
           <input className={inputCls} value={meta.assessors} onChange={(e) => setMeta({ ...meta, assessors: e.target.value })} />

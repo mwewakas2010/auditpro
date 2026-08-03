@@ -15,6 +15,38 @@ const PAGE_W = 210
 const PAGE_H = 297
 const CONTENT_W = PAGE_W - MARGIN * 2
 
+function loadImageDims(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => resolve({ w: img.width, h: img.height })
+    img.onerror = () => resolve(null)
+    img.src = dataUrl
+  })
+}
+
+async function toDataUrl(src) {
+  if (src.startsWith('data:')) return src
+  try {
+    const res = await fetch(src)
+    const blob = await res.blob()
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
+}
+
+function imageFormat(src) {
+  const s = src.toLowerCase()
+  if (s.includes('image/png') || s.endsWith('.png')) return 'PNG'
+  if (s.includes('image/webp') || s.endsWith('.webp')) return 'WEBP'
+  return 'JPEG'
+}
+
 function footer(doc, template) {
   const pageCount = doc.internal.getNumberOfPages()
   for (let i = 1; i <= pageCount; i++) {
@@ -29,17 +61,37 @@ function footer(doc, template) {
   }
 }
 
-export function generateCCVPdf({ template, categories, meta, responses }) {
+export async function generateCCVPdf({ template, categories, meta, responses, company }) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
 
   // ================= HEADER =================
   doc.setFillColor(...NAVY)
   doc.rect(0, 0, PAGE_W, 30, 'F')
+
+  if (company?.logo_url) {
+    const logoData = await toDataUrl(company.logo_url)
+    if (logoData) {
+      const dims = await loadImageDims(logoData)
+      if (dims) {
+        const maxH = 14, maxW = 34
+        let w = maxW, h = (dims.h / dims.w) * w
+        if (h > maxH) { h = maxH; w = (dims.w / dims.h) * h }
+        doc.addImage(logoData, imageFormat(company.logo_url), PAGE_W - MARGIN - w, 8, w, h)
+      }
+    }
+  }
+
   doc.setTextColor(255, 255, 255)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(14)
-  const titleLines = doc.splitTextToSize(template.name.toUpperCase(), CONTENT_W - 4)
+  const titleMaxWidth = company?.logo_url ? CONTENT_W - 40 : CONTENT_W - 4
+  const titleLines = doc.splitTextToSize(template.name.toUpperCase(), titleMaxWidth)
   doc.text(titleLines, MARGIN, 12)
+  if (company?.name) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9.5)
+    doc.text(company.name, MARGIN, 12 + titleLines.length * 5.5 + 2)
+  }
 
   let y = 36
   autoTable(doc, {
