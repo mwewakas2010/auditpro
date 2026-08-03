@@ -5,10 +5,13 @@ import Dashboard from './Dashboard.jsx'
 import AuditList from './AuditList.jsx'
 import Companies from './Companies.jsx'
 import AuditEditor from './AuditEditor.jsx'
+import CCVList from './CCVList.jsx'
+import CCVEditor from './CCVEditor.jsx'
 import {
   LayoutDashboard,
   ClipboardList,
   Building2,
+  ShieldCheck,
   FileText,
   ListChecks,
   Search,
@@ -20,6 +23,7 @@ import {
 const APP_NAV = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'audits', label: 'My Audits', icon: ClipboardList },
+  { key: 'ccvs', label: 'Critical Controls', icon: ShieldCheck },
   { key: 'companies', label: 'Manage Companies', icon: Building2 },
 ]
 
@@ -33,16 +37,19 @@ const AUDIT_TAB_MOBILE = {
 }
 
 export default function Shell() {
-  const [section, setSection] = useState('dashboard') // 'dashboard' | 'audits' | 'companies' | 'editor'
+  const [section, setSection] = useState('dashboard') // 'dashboard' | 'audits' | 'companies' | 'editor' | 'ccvs' | 'ccv-editor'
   const [auditId, setAuditId] = useState(null)
   const [auditTab, setAuditTab] = useState('setup')
-  // Bumped whenever we open a (new or different) audit, so AuditEditor gets
-  // a fresh mount (fresh internal state) rather than reusing stale state.
   const [editorKey, setEditorKey] = useState(0)
+
+  const [ccvId, setCcvId] = useState(null)
+  const [ccvTemplateId, setCcvTemplateId] = useState(null)
+  const [ccvEditorKey, setCcvEditorKey] = useState(0)
 
   const goToSection = (key) => {
     setSection(key)
     setAuditId(null)
+    setCcvId(null)
   }
 
   const openAudit = (id) => {
@@ -51,8 +58,20 @@ export default function Shell() {
     setEditorKey((k) => k + 1)
     setSection('editor')
   }
-
   const newAudit = () => openAudit(null)
+
+  const openCCV = (id) => {
+    setCcvId(id)
+    setCcvTemplateId(null)
+    setCcvEditorKey((k) => k + 1)
+    setSection('ccv-editor')
+  }
+  const newCCV = (templateId) => {
+    setCcvId(null)
+    setCcvTemplateId(templateId)
+    setCcvEditorKey((k) => k + 1)
+    setSection('ccv-editor')
+  }
 
   return (
     <div className="flex flex-col md:flex-row h-screen overflow-hidden">
@@ -63,9 +82,14 @@ export default function Shell() {
             <button onClick={() => goToSection('audits')} className="flex items-center gap-1.5 text-sm">
               <ArrowLeft size={18} /> My Audits
             </button>
-            <div className="text-xs font-mono text-[#9FB0C9]">
-              {AUDIT_TAB_MOBILE[auditTab]?.label}
-            </div>
+            <div className="text-xs font-mono text-[#9FB0C9]">{AUDIT_TAB_MOBILE[auditTab]?.label}</div>
+          </>
+        ) : section === 'ccv-editor' ? (
+          <>
+            <button onClick={() => goToSection('ccvs')} className="flex items-center gap-1.5 text-sm">
+              <ArrowLeft size={18} /> Critical Controls
+            </button>
+            <div className="text-xs font-mono text-[#9FB0C9]">CCV</div>
           </>
         ) : (
           <>
@@ -91,13 +115,13 @@ export default function Shell() {
             <div
               key={item.key}
               onClick={() => goToSection(item.key)}
-              className={`px-[22px] py-[13px] text-sm cursor-pointer border-l-[3px] transition-colors ${
-                section === item.key
+              className={`px-[22px] py-[13px] text-sm cursor-pointer border-l-[3px] flex items-center gap-2 transition-colors ${
+                section === item.key || (item.key === 'ccvs' && section === 'ccv-editor')
                   ? 'bg-white/10 border-gold text-white'
                   : 'border-transparent text-[#C7CEDA] hover:bg-white/5'
               }`}
             >
-              {item.label}
+              <item.icon size={15} /> {item.label}
             </div>
           ))}
         </div>
@@ -142,6 +166,7 @@ export default function Shell() {
       <div className="flex-1 min-w-0 overflow-y-auto pb-16 md:pb-0">
         {section === 'dashboard' && <Dashboard />}
         {section === 'audits' && <AuditList onOpen={openAudit} onNew={newAudit} />}
+        {section === 'ccvs' && <CCVList onOpen={openCCV} onNew={newCCV} />}
         {section === 'companies' && <Companies />}
         {section === 'editor' && (
           <AuditEditor
@@ -151,6 +176,9 @@ export default function Shell() {
             onExit={() => goToSection('audits')}
             onAuditSaved={setAuditId}
           />
+        )}
+        {section === 'ccv-editor' && (
+          <CCVEditor key={ccvEditorKey} ccvId={ccvId} templateId={ccvTemplateId} onExit={() => goToSection('ccvs')} />
         )}
       </div>
 
@@ -176,7 +204,7 @@ export default function Shell() {
             })
           : APP_NAV.map((item) => {
               const Icon = item.icon
-              const active = section === item.key
+              const active = section === item.key || (item.key === 'ccvs' && section === 'ccv-editor')
               return (
                 <button
                   key={item.key}
@@ -186,7 +214,7 @@ export default function Shell() {
                   }`}
                 >
                   <Icon size={20} />
-                  {item.key === 'companies' ? 'Companies' : item.label}
+                  {item.key === 'companies' ? 'Companies' : item.key === 'ccvs' ? 'CCVs' : item.label}
                 </button>
               )
             })}

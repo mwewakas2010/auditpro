@@ -1,10 +1,71 @@
-# AuditPro — ISO Audit Management (Mandatory Document Flags)
+# AuditPro — ISO Audit Management (Critical Controls Verification Module)
 
-Standalone app for SentinelPro Consultants. This pass adds mandatory
-documented-information flags to the clauses that actually require them —
-no database migration needed, no changes outside the app itself.
+Standalone app for SentinelPro Consultants. This pass adds a genuinely new
+module — **Critical Controls Verification (CCVs)** — sitting alongside the
+ISO audit module, built on a general checklist template system rather than
+as a one-off.
 
-## New in this pass: Mandatory document flags per clause
+## New in this pass: Critical Controls Verification (CCVs)
+
+**A new permanent nav item**, "Critical Controls," separate from My Audits.
+
+**The general template system** (the actual foundation of this pass):
+- `checklist_templates` → `checklist_template_categories` → `checklist_template_items`
+  — a real, general data model, not hardcoded like the ISO clause files.
+  Any future checklist type (equipment inspection, safety walkthrough, etc.)
+  slots into this same structure.
+- **In-app template authoring is deferred** — for this first slice, new
+  templates get added as seed data (same as the Mobile Equipment CCV form
+  below), not through a builder UI. The data model is already shaped for a
+  builder to be added later without a schema change.
+
+**The Mobile Equipment CCV** — seeded from your uploaded form, matching its
+exact structure:
+- Document control header (Document Reference, Revision Number, Total
+  Pages, Date of Issue, Date of Next Review) — these belong to the
+  *template*, not each completed instance, matching how the source form
+  works (FM0635 Rev 01 stays fixed across every use)
+- Its own metadata fields — Assessors, Date/Time, Location, Department,
+  Section — **not** tied to your Company/Department model, since CCVs
+  don't need the "which client am I auditing" concept
+- Seven categories exactly as in the source form, each a **Yes/No**
+  compliance checklist (not the ISO 5-state classification)
+- **Auto-calculated summary score** per category (Yes count / total items),
+  live as you work
+- **Recommendations only triggered by "No" answers** — marking an item
+  "No" reveals inline Action / Responsible Person / Due Date fields right
+  there; the PDF report compiles every "No" item's recommendation into a
+  single Recommendations table at the end, exactly like the source form
+- **Real camera capture and file upload per item** — reuses the same
+  camera component already built for ISO audits
+- **Save / reopen / edit / delete**, same CRUD pattern as audits
+- **PDF export** matching the source form's actual layout — header block,
+  metadata, category tables with Yes/No highlighting, per-category summary
+  scores, and the compiled Recommendations table
+
+### Deliberately deferred from this pass
+
+- **Word (.docx) export** — PDF only for now, per your call given the real
+  cost of building a second document format
+- **In-app template builder** — new templates still need to be added as
+  seed data (send me a form, I translate it into the template structure)
+- **Subscriber organization availability** — built for your consultant
+  account only right now; extending to subscriber orgs is a natural, but
+  separate, next step
+- **Offline sync** — unlike the ISO audit module, CCVs don't yet have the
+  local-first/offline-save behavior built in
+
+### Required migration
+
+Run `supabase/migration_006_ccv.sql`. Additive — creates six new tables and
+seeds the Mobile Equipment CCV template. **Important**: this seed only runs
+once — if you ever re-run this migration file, check `checklist_templates`
+for an existing "Mobile Equipment Critical Control Verification" row first,
+or you'll get a duplicate.
+
+## What's built (from earlier passes)
+
+### Mandatory document flags per clause
 
 - Distinct from the general "evidence to check" hints, clauses where the
   standard **explicitly requires** a document to be maintained (like a
