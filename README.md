@@ -1,10 +1,28 @@
-# AuditPro — ISO Audit Management (Billing: Trial & Gating — Slice 1 of 2)
+# AuditPro — ISO Audit Management (Evidence Guidance per Clause)
 
-Standalone app for SentinelPro Consultants. This pass adds trial tracking
-and access gating for subscriber organizations. **Real payment processing
-via Flutterwave is a separate, next pass** — see below.
+Standalone app for SentinelPro Consultants. This pass adds internal
+reference guidance to every clause of all three standards — no database
+migration needed, no changes outside the app itself.
 
-## New in this pass: Trial tracking & access gating
+## New in this pass: "Evidence to check" guidance per clause
+
+- Every clause across ISO 45001:2018, ISO 9001:2015, and ISO 14001:2015 now
+  has a collapsible **"💡 Evidence to check"** hint in the Checklist tab —
+  at least 3 example evidence sources (documents, records, or interview
+  angles) an auditor might check for that specific requirement.
+- This is purely a **working reference for the auditor** — click to expand,
+  collapsed by default so it doesn't clutter the screen.
+- **Confirmed excluded from every report**: neither `pdfExport.js` (the
+  single-audit report) nor `consolidatedReport.js` (the multi-audit company
+  report) reference this field anywhere — it's structurally impossible for
+  it to leak into a report, not just something we're careful not to include.
+- No database changes — this lives entirely in the clause library files
+  (`src/data/iso45001Clauses.js`, `iso9001Clauses.js`, `iso14001Clauses.js`),
+  so there's nothing to migrate.
+
+## What's built (from earlier passes)
+
+### Trial tracking & access gating
 
 - Every new organization gets a **30-day free trial** automatically on
   sign-up.
