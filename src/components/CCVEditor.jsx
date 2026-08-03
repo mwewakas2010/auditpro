@@ -20,11 +20,12 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
   const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
+  const [companiesError, setCompaniesError] = useState('')
   const [cameraOpenFor, setCameraOpenFor] = useState(null)
   const fileInputs = useRef({})
 
   useEffect(() => {
-    listCompanies().then(setCompanies).catch(() => {})
+    listCompanies().then(setCompanies).catch((err) => setCompaniesError(err.message))
   }, [])
 
   useEffect(() => {
@@ -170,6 +171,14 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
               <option key={co.id} value={co.id}>{co.name}</option>
             ))}
           </select>
+          {companiesError && (
+            <div className="text-[10.5px] text-major mt-1">Could not load companies: {companiesError}</div>
+          )}
+          {!companiesError && companies.length === 0 && (
+            <div className="text-[10.5px] text-inksoft mt-1">
+              No companies yet — add one in "Manage Companies" first.
+            </div>
+          )}
         </div>
         <div>
           <label className="block text-[11px] font-semibold text-navy2 mb-1.5 uppercase tracking-wide">Assessors</label>
