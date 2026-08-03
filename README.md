@@ -1,10 +1,32 @@
-# AuditPro — ISO Audit Management (Evidence Guidance per Clause)
+# AuditPro — ISO Audit Management (Mandatory Document Flags)
 
-Standalone app for SentinelPro Consultants. This pass adds internal
-reference guidance to every clause of all three standards — no database
-migration needed, no changes outside the app itself.
+Standalone app for SentinelPro Consultants. This pass adds mandatory
+documented-information flags to the clauses that actually require them —
+no database migration needed, no changes outside the app itself.
 
-## New in this pass: "Evidence to check" guidance per clause
+## New in this pass: Mandatory document flags per clause
+
+- Distinct from the general "evidence to check" hints, clauses where the
+  standard **explicitly requires** a document to be maintained (like a
+  policy) or a record to be retained (like management review minutes) now
+  show a **"⚠️ Mandatory: ..."** line at the top of that same expandable
+  hint — worded to describe exactly what the standard requires.
+- Coverage: **17 of 27** clauses in ISO 45001:2018, **18 of 28** in ISO
+  9001:2015, **13 of 26** in ISO 14001:2015 are flagged — roughly matching
+  each standard's actual documented-information burden (9001 and 45001 are
+  more document-heavy in clauses 6–10; 14001 somewhat less so).
+- Same treatment as the evidence hints: **confirmed excluded from every
+  report** — grepped both `pdfExport.js` and `consolidatedReport.js`, this
+  field isn't referenced in either file at all.
+- Worth a sanity check on your end: I mapped these from general ISO
+  auditor knowledge of each standard's documented-information
+  requirements, applied to this app's simplified (non-sub-sub-clause)
+  clause structure. Worth spot-checking a handful against your own
+  certification-body training materials before relying on it heavily.
+
+## What's built (from earlier passes)
+
+### "Evidence to check" guidance per clause
 
 - Every clause across ISO 45001:2018, ISO 9001:2015, and ISO 14001:2015 now
   has a collapsible **"💡 Evidence to check"** hint in the Checklist tab —

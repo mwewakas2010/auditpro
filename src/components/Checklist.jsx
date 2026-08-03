@@ -109,16 +109,23 @@ export default function Checklist({ scheme, checklist, setChecklist, clauses, st
               <div className="font-mono text-xs text-gold font-semibold tracking-wide">{c.clause_code}</div>
               <div className="font-display text-[15.5px] font-semibold mt-0.5">{c.title}</div>
               <div className="text-[12.5px] text-inksoft mt-1.5 leading-relaxed">{c.requirement_text}</div>
-              {c.evidence_examples && c.evidence_examples.length > 0 && (
+              {(c.evidence_examples?.length > 0 || c.mandatory_document) && (
                 <details className="mt-2 text-[11.5px]">
                   <summary className="text-gold cursor-pointer select-none font-medium">
                     💡 Evidence to check (internal reference — not shown in report)
                   </summary>
-                  <ul className="mt-1.5 pl-4 list-disc text-inksoft space-y-0.5">
-                    {c.evidence_examples.map((ex, i) => (
-                      <li key={i}>{ex}</li>
-                    ))}
-                  </ul>
+                  {c.mandatory_document && (
+                    <div className="mt-1.5 text-major font-medium">
+                      ⚠️ Mandatory: {c.mandatory_document}
+                    </div>
+                  )}
+                  {c.evidence_examples && c.evidence_examples.length > 0 && (
+                    <ul className="mt-1.5 pl-4 list-disc text-inksoft space-y-0.5">
+                      {c.evidence_examples.map((ex, i) => (
+                        <li key={i}>{ex}</li>
+                      ))}
+                    </ul>
+                  )}
                 </details>
               )}
               {entry.status === 'conform' && (
