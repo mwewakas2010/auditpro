@@ -1,10 +1,39 @@
-# AuditPro — ISO Audit Management (CCV: Company & Logo on Report)
+# AuditPro — ISO Audit Management (CCV Offline Sync)
 
-Standalone app for SentinelPro Consultants. This pass links Critical
-Control Verifications to your existing Companies, so the PDF report shows
-the client name and logo — reusing what's already in Manage Companies.
+Standalone app for SentinelPro Consultants. This pass brings Critical
+Control Verifications to offline parity with ISO audits — same proven
+pattern, adapted to the CCV data shape.
 
-## New in this pass: Company/logo on CCV reports
+## New in this pass: CCV offline sync
+
+- Open a CCV while online, then lose signal entirely — you can keep
+  marking Yes/No, adding photos, filling in recommendations for "No"
+  items, editing Setup fields, all with zero connection.
+- Same **Online/Offline indicator** next to the save buttons.
+- **Save CCV while offline** saves to the device and tells you clearly,
+  rather than failing.
+- **Syncs automatically the moment connectivity returns** — no button to
+  press.
+- If you open a CCV with no connection, falls back to the last version
+  saved on this device, with the same clear banner explaining that.
+- Real server errors (not just connectivity issues) are surfaced plainly
+  rather than mislabeled as an offline save — same fix applied here as was
+  applied to the ISO audit module earlier.
+
+**How it's built**: a second, separate object store (`ccvs`) in the same
+local IndexedDB database used for offline audits — additive, doesn't touch
+your existing offline audit drafts. Bumped the local database version to
+add it; this is a one-time, automatic upgrade the browser handles itself,
+nothing you need to do.
+
+### No new Supabase migration for this pass
+
+This is entirely client-side (local browser storage) — nothing to run in
+Supabase.
+
+## What's built (from earlier passes)
+
+### Company & logo on CCV reports
 
 - CCV form now has a **Company** dropdown at the top of its metadata,
   pulling from the same company list used by ISO audits.

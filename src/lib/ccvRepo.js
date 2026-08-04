@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient'
 import { uploadDataUrl } from './auditRepo'
+import { listPendingCCVs, deleteLocalCCV } from './offlineStore'
 
 // ---------- Templates ----------
 
@@ -168,4 +169,33 @@ export async function saveCCV({ ccvId, templateId, companyId, meta, responses })
   }
 
   return id
+}
+
+// Pushes every locally-queued (offline-created/edited) CCV up to Supabase,
+// one at a time. Mirrors syncPendingAudits - called automatically when the
+// app detects it's back online.
+export async function syncPendingCCVs() {
+  const pending = await listPendingCCVs()
+  let succeeded = 0
+  let failed = 0
+  const synced = [] // { localId, realId } for the caller to reconcile an open editor against
+  for (const entry of pending) {
+    try {
+      const realCcvId = entry.localId.startsWith('local-') ? null : entry.localId
+      const realId = await saveCCV({
+        ccvId: realCcvId,
+        templateId: entry.templateId,
+        companyId: entry.companyId,
+        meta: entry.meta,
+        responses: entry.responses,
+      })
+      await deleteLocalCCV(entry.localId)
+      synced.push({ localId: entry.localId, realId })
+      succeeded++
+    } catch (err) {
+      failed++
+      console.error('CCV sync failed for', entry.localId, err)
+    }
+  }
+  return { succeeded, failed, total: pending.length, synced }
 }

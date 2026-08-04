@@ -1,8 +1,9 @@
 import { openDB } from 'idb'
 
 const DB_NAME = 'auditpro-offline'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const AUDITS_STORE = 'audits'
+const CCVS_STORE = 'ccvs'
 const COMPANIES_CACHE_KEY = 'companies-cache'
 
 let dbPromise = null
@@ -12,6 +13,9 @@ function getDB() {
       upgrade(db) {
         if (!db.objectStoreNames.contains(AUDITS_STORE)) {
           db.createObjectStore(AUDITS_STORE, { keyPath: 'localId' })
+        }
+        if (!db.objectStoreNames.contains(CCVS_STORE)) {
+          db.createObjectStore(CCVS_STORE, { keyPath: 'localId' })
         }
       },
     })
@@ -52,6 +56,37 @@ export async function listPendingAudits() {
   const db = await getDB()
   const all = await db.getAll(AUDITS_STORE)
   return all.filter((a) => a.pendingSync)
+}
+
+// ---- Same pattern as above, for CCVs ----
+
+export async function saveLocalCCV(localId, { templateId, companyId, meta, responses, pendingSync }) {
+  const db = await getDB()
+  await db.put(CCVS_STORE, {
+    localId,
+    templateId,
+    companyId: companyId || null,
+    meta,
+    responses,
+    pendingSync: !!pendingSync,
+    savedAt: new Date().toISOString(),
+  })
+}
+
+export async function getLocalCCV(localId) {
+  const db = await getDB()
+  return db.get(CCVS_STORE, localId)
+}
+
+export async function deleteLocalCCV(localId) {
+  const db = await getDB()
+  await db.delete(CCVS_STORE, localId)
+}
+
+export async function listPendingCCVs() {
+  const db = await getDB()
+  const all = await db.getAll(CCVS_STORE)
+  return all.filter((c) => c.pendingSync)
 }
 
 // Simple localStorage cache of the companies list, so the Setup screen's

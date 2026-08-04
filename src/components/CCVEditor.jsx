@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { loadTemplateStructure, loadCCV, saveCCV } from '../lib/ccvRepo'
+import { loadTemplateStructure, loadCCV, saveCCV, syncPendingCCVs } from '../lib/ccvRepo'
 import { listCompanies } from '../lib/companyRepo'
+import { saveLocalCCV, getLocalCCV, deleteLocalCCV } from '../lib/offlineStore'
+import { useOnlineStatus } from '../lib/useOnlineStatus'
 import { generateCCVPdf } from '../utils/ccvPdfExport'
 import CameraCapture from './CameraCapture.jsx'
 
@@ -10,6 +12,7 @@ function emptyMeta() {
 
 export default function CCVEditor({ ccvId, templateId, onExit }) {
   const [id, setId] = useState(ccvId)
+  const [localId, setLocalId] = useState(() => ccvId || `local-${crypto.randomUUID()}`)
   const [template, setTemplate] = useState(null)
   const [categories, setCategories] = useState([])
   const [meta, setMeta] = useState(emptyMeta)
@@ -22,7 +25,12 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
   const [saveMsg, setSaveMsg] = useState('')
   const [companiesError, setCompaniesError] = useState('')
   const [cameraOpenFor, setCameraOpenFor] = useState(null)
+  const [offlineLoaded, setOfflineLoaded] = useState(false)
   const fileInputs = useRef({})
+
+  const online = useOnlineStatus()
+  const hasInitiallyLoaded = useRef(false)
+  const wasOffline = useRef(!online)
 
   useEffect(() => {
     listCompanies().then(setCompanies).catch((err) => setCompaniesError(err.message))
@@ -32,30 +40,103 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
     ;(async () => {
       try {
         if (ccvId) {
+          const local = await getLocalCCV(ccvId)
+          if (local && local.pendingSync) {
+            // Unsynced offline edits exist for this CCV - use those rather
+            // than risk overwriting them with (now stale) server data.
+            const { template: t, categories: cats } = await loadTemplateStructure(local.templateId)
+            setTemplate(t)
+            setCategories(cats)
+            setMeta(local.meta)
+            setResponses(local.responses)
+            setCompanyId(local.companyId || null)
+            setOfflineLoaded(true)
+            setLoading(false)
+            hasInitiallyLoaded.current = true
+            return
+          }
+
           const result = await loadCCV(ccvId)
           setTemplate(result.template)
           setCategories(result.categories)
-          setMeta({
+          const loadedMeta = {
             assessors: result.instance.assessors || '',
             dateTime: result.instance.date_time ? result.instance.date_time.slice(0, 16) : '',
             location: result.instance.location || '',
             department: result.instance.department || '',
             section: result.instance.section || '',
             status: result.instance.status || 'in_progress',
-          })
+          }
+          setMeta(loadedMeta)
           setResponses(result.responses)
           setCompanyId(result.instance.company_id || null)
+          // Cache a non-pending copy so this CCV can still be opened (and
+          // edited offline) even with zero signal next time.
+          await saveLocalCCV(ccvId, {
+            templateId: result.template.id,
+            companyId: result.instance.company_id || null,
+            meta: loadedMeta,
+            responses: result.responses,
+            pendingSync: false,
+          })
         } else {
           const { template: t, categories: cats } = await loadTemplateStructure(templateId)
           setTemplate(t)
           setCategories(cats)
         }
       } catch (err) {
-        setLoadError(err.message)
+        if (ccvId) {
+          const local = await getLocalCCV(ccvId)
+          if (local) {
+            const { template: t, categories: cats } = await loadTemplateStructure(local.templateId)
+            setTemplate(t)
+            setCategories(cats)
+            setMeta(local.meta)
+            setResponses(local.responses)
+            setCompanyId(local.companyId || null)
+            setOfflineLoaded(true)
+          } else {
+            setLoadError(err.message)
+          }
+        } else {
+          setLoadError(err.message)
+        }
       }
       setLoading(false)
+      hasInitiallyLoaded.current = true
     })()
   }, [ccvId, templateId])
+
+  // Auto-save to local storage on every change, as a safety net - works
+  // regardless of online/offline status.
+  useEffect(() => {
+    if (!hasInitiallyLoaded.current || !template) return
+    const t = setTimeout(() => {
+      saveLocalCCV(localId, { templateId: template.id, companyId, meta, responses, pendingSync: true })
+    }, 600)
+    return () => clearTimeout(t)
+  }, [meta, responses, companyId, localId, template])
+
+  // Sync automatically the moment connectivity returns.
+  useEffect(() => {
+    if (online && wasOffline.current) {
+      syncPendingCCVs().then(({ succeeded, failed, total, synced }) => {
+        if (total > 0) {
+          setSaveMsg(
+            failed > 0
+              ? `Back online — synced ${succeeded} of ${total} pending CCV(s), ${failed} failed.`
+              : `Back online — synced ${succeeded} pending CCV(s).`
+          )
+        }
+        const match = synced?.find((s) => s.localId === localId)
+        if (match) {
+          setId(match.realId)
+          setLocalId(match.realId)
+        }
+      })
+    }
+    wasOffline.current = !online
+  }, [online])
 
   const updateResponse = (itemId, patch) => {
     setResponses((prev) => ({
@@ -98,16 +179,37 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
   const handleSave = async (markFinal) => {
     setSaving(true)
     setSaveMsg('')
+    const newMeta = markFinal ? { ...meta, status: 'final' } : meta
+
+    if (!online) {
+      await saveLocalCCV(localId, { templateId: template.id, companyId, meta: newMeta, responses, pendingSync: true })
+      setMeta(newMeta)
+      setSaveMsg("📴 Offline — saved on this device. Will sync automatically once you're back online.")
+      setSaving(false)
+      return
+    }
+
     try {
-      const newMeta = markFinal ? { ...meta, status: 'final' } : meta
       const savedId = await saveCCV({ ccvId: id, templateId: template.id, companyId, meta: newMeta, responses })
+      if (localId !== savedId) {
+        await deleteLocalCCV(localId)
+        setLocalId(savedId)
+      }
       setId(savedId)
       setMeta(newMeta)
       const result = await loadCCV(savedId)
       setResponses(result.responses)
+      await saveLocalCCV(savedId, { templateId: template.id, companyId, meta: newMeta, responses: result.responses, pendingSync: false })
       setSaveMsg('Saved ' + new Date().toLocaleTimeString())
+      setOfflineLoaded(false)
     } catch (err) {
-      setSaveMsg('Error: ' + err.message)
+      await saveLocalCCV(localId, { templateId: template.id, companyId, meta: newMeta, responses, pendingSync: true })
+      const looksLikeNetworkFailure = !online || err.name === 'TypeError' || /fetch|network/i.test(err.message || '')
+      if (looksLikeNetworkFailure) {
+        setSaveMsg("Could not reach the server — saved on this device instead. Will retry automatically once back online.")
+      } else {
+        setSaveMsg(`Error: ${err.message || 'Save was rejected by the server.'} (Your work is still saved on this device.)`)
+      }
     }
     setSaving(false)
   }
@@ -138,7 +240,7 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
             {template.date_of_issue} • Next review {template.date_of_next_review}
           </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
           <button onClick={() => handleSave(false)} disabled={saving} className="bg-navy text-white px-4 py-2 rounded text-sm font-medium disabled:opacity-50">
             {saving ? 'Saving…' : 'Save CCV'}
           </button>
@@ -153,11 +255,29 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
               Export PDF
             </button>
           )}
+          <div className={`flex items-center gap-1.5 text-[11px] font-medium ${online ? 'text-conform' : 'text-major'}`}>
+            <span className={`w-2 h-2 rounded-full ${online ? 'bg-conform' : 'bg-major'}`} />
+            {online ? 'Online' : 'Offline'}
+          </div>
         </div>
       </div>
 
+      {offlineLoaded && (
+        <div className="text-xs mb-3 px-3 py-1.5 rounded bg-minorbg text-minor">
+          📴 Showing the last version saved on this device — no connection right now. Your edits will sync once you're back online.
+        </div>
+      )}
+
       {saveMsg && (
-        <div className={`text-xs mb-4 px-3 py-1.5 rounded ${saveMsg.startsWith('Error') ? 'bg-majorbg text-major' : 'bg-conformbg text-conform'}`}>
+        <div
+          className={`text-xs mb-4 px-3 py-1.5 rounded ${
+            saveMsg.startsWith('Could not reach') || saveMsg.startsWith('Error')
+              ? 'bg-majorbg text-major'
+              : saveMsg.startsWith('📴')
+              ? 'bg-minorbg text-minor'
+              : 'bg-conformbg text-conform'
+          }`}
+        >
           {saveMsg}
         </div>
       )}
