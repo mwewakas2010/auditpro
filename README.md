@@ -1,10 +1,29 @@
-# AuditPro — ISO Audit Management (CCV Offline Sync)
+# AuditPro — ISO Audit Management (CCV Photo Evidence in PDF)
 
-Standalone app for SentinelPro Consultants. This pass brings Critical
-Control Verifications to offline parity with ISO audits — same proven
-pattern, adapted to the CCV data shape.
+Standalone app for SentinelPro Consultants. This pass fixes a real gap:
+photos captured in the CCV form weren't actually appearing in the exported
+PDF at all — the camera/upload feature worked, but nothing wired those
+photos into the report.
 
-## New in this pass: CCV offline sync
+## Fixed in this pass: CCV photo evidence appendix
+
+- The CCV PDF now ends with an **"Appendix — Photographic Evidence"**
+  page, same pattern already proven in the ISO audit module: photos
+  grouped by item, each showing the item number and requirement text
+  above a compact grid of thumbnails.
+- **Only camera-captured photos**, not uploaded documents — same rule
+  already established for ISO audit reports, for consistency.
+- Items with no photos are skipped entirely; if nothing was photographed
+  across the whole CCV, the appendix page doesn't get added at all.
+- Handles page overflow automatically, same as the ISO audit appendix.
+
+### No new migration for this pass
+
+Purely a PDF-generation fix — nothing changed in the database.
+
+## What's built (from earlier passes)
+
+### CCV offline sync
 
 - Open a CCV while online, then lose signal entirely — you can keep
   marking Yes/No, adding photos, filling in recommendations for "No"

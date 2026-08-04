@@ -47,6 +47,87 @@ function imageFormat(src) {
   return 'JPEG'
 }
 
+async function addPhotoAppendix(doc, categories, responses) {
+  const CELL_W = 42, CELL_H = 32, GAP = 4, PER_ROW = 4
+
+  const groups = []
+  categories.forEach((cat) => {
+    cat.checklist_template_items.forEach((item) => {
+      const r = responses[item.id]
+      const photos = (r?.thumbs || []).filter((t) => t.kind === 'photo' && (t.dataUrl || t.remoteUrl))
+      if (photos.length) groups.push({ item, categoryLabel: `${cat.category_number} ${cat.name}`, photos })
+    })
+  })
+  if (!groups.length) return
+
+  doc.addPage()
+  let y = 20
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(12)
+  doc.setTextColor(...NAVY)
+  doc.text('Appendix — Photographic Evidence', MARGIN, y)
+  doc.setDrawColor(184, 134, 43)
+  doc.setLineWidth(0.6)
+  doc.line(MARGIN, y + 1.5, MARGIN + 10, y + 1.5)
+  doc.setLineWidth(0.2)
+  y += 8
+  doc.setFont('helvetica', 'italic')
+  doc.setFontSize(8.5)
+  doc.setTextColor(...INK_SOFT)
+  doc.text('Photographs captured in-app during the verification, grouped by item.', MARGIN, y)
+  y += 7
+
+  for (const group of groups) {
+    if (y + 12 + CELL_H > PAGE_H - 20) { doc.addPage(); y = 20 }
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9.5)
+    doc.setTextColor(...NAVY)
+    doc.text(`${group.item.item_number} — ${group.categoryLabel}`, MARGIN, y)
+    y += 4.5
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(...INK_SOFT)
+    const reqLines = doc.splitTextToSize(group.item.requirement_text, CONTENT_W)
+    doc.text(reqLines.slice(0, 2), MARGIN, y)
+    y += Math.min(reqLines.length, 2) * 4 + 3
+
+    for (let i = 0; i < group.photos.length; i += PER_ROW) {
+      const row = group.photos.slice(i, i + PER_ROW)
+      if (y + CELL_H > PAGE_H - 20) { doc.addPage(); y = 20 }
+      for (let j = 0; j < row.length; j++) {
+        const photo = row[j]
+        const x = MARGIN + j * (CELL_W + GAP)
+        doc.setDrawColor(...LINE)
+        doc.rect(x, y, CELL_W, CELL_H)
+        const src = photo.dataUrl || photo.remoteUrl
+        let drawn = false
+        try {
+          const dataSrc = await toDataUrl(src)
+          if (dataSrc) {
+            const dims = await loadImageDims(dataSrc)
+            if (dims) {
+              const scale = Math.min(CELL_W / dims.w, CELL_H / dims.h)
+              const w = dims.w * scale, h = dims.h * scale
+              doc.addImage(dataSrc, imageFormat(src), x + (CELL_W - w) / 2, y + (CELL_H - h) / 2, w, h)
+              drawn = true
+            }
+          }
+        } catch {
+          drawn = false
+        }
+        if (!drawn) {
+          doc.setFont('helvetica', 'italic')
+          doc.setFontSize(7)
+          doc.setTextColor(...INK_SOFT)
+          doc.text('Image unavailable', x + CELL_W / 2, y + CELL_H / 2, { align: 'center' })
+        }
+      }
+      y += CELL_H + GAP
+    }
+    y += 4
+  }
+}
+
 function footer(doc, template) {
   const pageCount = doc.internal.getNumberOfPages()
   for (let i = 1; i <= pageCount; i++) {
@@ -205,6 +286,8 @@ export async function generateCCVPdf({ template, categories, meta, responses, co
       body: recommendations.map((r, i) => [i + 1, `[${r.itemNumber}] ${r.action}`, r.responsible, r.dueDate]),
     })
   }
+
+  await addPhotoAppendix(doc, categories, responses)
 
   footer(doc, template)
   doc.save(`${template.document_reference || 'CCV'}_${(meta.location || 'report').replace(/\s+/g, '_')}.pdf`)
