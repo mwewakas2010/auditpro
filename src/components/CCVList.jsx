@@ -84,20 +84,25 @@ export default function CCVList({ onOpen, onNew }) {
       )}
 
       <div className="flex flex-col gap-2.5">
-        {ccvs.map((c) => (
+        {ccvs.map((c, index) => (
           <div
             key={c.id}
             onClick={() => onOpen(c.id)}
             className="bg-white border border-line rounded-md px-4 py-3 flex flex-col md:flex-row justify-between md:items-center gap-2.5 cursor-pointer hover:border-navy2"
           >
-            <div>
-              <div className="font-medium text-[14px]">
-                {c.checklist_templates?.name || 'Untitled Template'}
-                {c.companies?.name && <span className="text-inksoft font-normal"> — {c.companies.name}</span>}
+            <div className="flex items-start gap-3">
+              <div className="font-mono text-xs text-inksoft bg-paper border border-line rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5">
+                {index + 1}
               </div>
-              <div className="text-xs text-inksoft mt-0.5 font-mono">
-                {c.location || 'No location'} • {c.department || 'No department'} •{' '}
-                {c.date_time ? new Date(c.date_time).toLocaleString() : 'No date set'}
+              <div>
+                <div className="font-medium text-[14px]">
+                  {c.checklist_templates?.name || 'Untitled Template'}
+                  {c.companies?.name && <span className="text-inksoft font-normal"> — {c.companies.name}</span>}
+                </div>
+                <div className="text-xs text-inksoft mt-0.5 font-mono">
+                  {c.location || 'No location'} • {c.department || 'No department'} •{' '}
+                  {c.date_time ? new Date(c.date_time).toLocaleString() : 'No date set'}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
