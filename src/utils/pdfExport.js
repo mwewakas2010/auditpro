@@ -3,15 +3,6 @@ import autoTable from 'jspdf-autotable'
 import { getStandardInfo } from '../data/standards'
 import { badgeInfo, defaultScopeText, DEFAULT_METHODOLOGY_NARRATIVE, PROCESS_VERIFICATION_STATEMENT, DEFAULT_SAMPLING_DISCLAIMER, DEFAULT_CONFIDENTIALITY_STATEMENT } from '../data/schemes'
 
-function conclusionText(conclusion, systemName) {
-  const map = {
-    suitable_effective: `The ${systemName} is suitable, adequate and effective for the scope audited.`,
-    adequate_not_effective: `The ${systemName} is adequate but not fully effective for the scope audited.`,
-    not_suitable: `The ${systemName} is not suitable / not adequate for the scope audited.`,
-  }
-  return map[conclusion] || '—'
-}
-
 const NAVY = [22, 37, 61]
 const GOLD = [184, 134, 43]
 const INK = [34, 38, 43]
@@ -39,6 +30,15 @@ const METHOD_LABELS = {
   field_visit: 'Field Visit',
 }
 
+function conclusionText(conclusion, systemName) {
+  const map = {
+    suitable_effective: `The ${systemName} is suitable, adequate and effective for the scope audited.`,
+    adequate_not_effective: `The ${systemName} is adequate but not fully effective for the scope audited.`,
+    not_suitable: `The ${systemName} is not suitable / not adequate for the scope audited.`,
+  }
+  return map[conclusion] || '—'
+}
+
 function rowStyle(status) {
   switch (status) {
     case 'conform': return { fill: CONFORM, text: CONFORM_TXT }
@@ -56,6 +56,15 @@ function evidenceFileList(thumbs) {
   return thumbs.map((t) => `${t.kind === 'photo' ? 'Photo' : 'File'}: ${t.label}`).join('\n')
 }
 
+function loadImageDims(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => resolve({ w: img.width, h: img.height })
+    img.onerror = () => resolve(null)
+    img.src = dataUrl
+  })
+}
+
 async function toDataUrl(src) {
   if (src.startsWith('data:')) return src
   try {
@@ -70,15 +79,6 @@ async function toDataUrl(src) {
   } catch {
     return null
   }
-}
-
-function loadImageDims(dataUrl) {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.onload = () => resolve({ w: img.width, h: img.height })
-    img.onerror = () => resolve(null)
-    img.src = dataUrl
-  })
 }
 
 function imageFormat(src) {
@@ -294,7 +294,6 @@ export async function generateAuditPdf({ audit, signoffs, checklist, scope, clau
     y = doc.lastAutoTable.finalY + 6
   }
 
-  // Discontinuation — only ever appears here if actually invoked
   if (audit.discontinued) {
     doc.setDrawColor(...MAJOR_TXT)
     doc.setFillColor(...MAJOR)
@@ -311,7 +310,7 @@ export async function generateAuditPdf({ audit, signoffs, checklist, scope, clau
     doc.text(discLines.slice(0, 3), MARGIN + 3, y + 11)
   }
 
-  // ================= PAGE 3+: DETAILED AUDIT RESULTS (all clauses) =================
+  // ================= PAGE 3+: EXECUTIVE SUMMARY, VERIFICATION, NC FINDINGS =================
   doc.addPage()
   y = 20
   y = sectionHeader(doc, 'Executive Summary', y)
@@ -335,7 +334,6 @@ export async function generateAuditPdf({ audit, signoffs, checklist, scope, clau
   })
   y = doc.lastAutoTable.finalY + 8
 
-  // Process verification statement — appears just before the results sections
   y = sectionHeader(doc, 'Process Verification Statement', y)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9.5)
@@ -344,7 +342,6 @@ export async function generateAuditPdf({ audit, signoffs, checklist, scope, clau
   doc.text(lines, MARGIN, y)
   y += lines.length * 4.3 + 8
 
-  // Nonconformances, presented in findings format — just before the full clause-by-clause table
   y = sectionHeader(doc, 'Findings — Nonconformances', y)
   const allScopedClauses = clauses.filter((c) => scope?.[c.clause_code]?.inScope !== false)
   const ncRows = allScopedClauses.filter((c) => ['nc', 'minor', 'major'].includes(checklist[c.clause_code]?.status))
@@ -458,17 +455,43 @@ export async function generateAuditPdf({ audit, signoffs, checklist, scope, clau
   y += lines.length * 4.6 + 10
 
   y = sectionHeader(doc, 'Sign-off', y)
-  autoTable(doc, {
-    startY: y,
-    theme: 'grid',
-    margin: { left: MARGIN, right: MARGIN },
-    styles: { fontSize: 9.5, cellPadding: 3 },
-    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 48 } },
-    body: [
-      ['Lead Auditor', signoffs.lead_auditor ? `${signoffs.lead_auditor.name} — signed ${signoffs.lead_auditor.date}` : 'Not signed'],
-      ['Auditee Representative', signoffs.auditee_rep ? `${signoffs.auditee_rep.name} — signed ${signoffs.auditee_rep.date}` : 'Not signed'],
-    ],
-  })
+
+  const signRow = async (label, signoff) => {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9.5)
+    doc.setTextColor(...INK)
+    doc.text(label, MARGIN, y)
+    y += 5
+    if (!signoff) {
+      doc.setFont('helvetica', 'italic')
+      doc.setFontSize(9)
+      doc.setTextColor(...INK_SOFT)
+      doc.text('Not signed', MARGIN, y)
+      y += 10
+      return
+    }
+    if (signoff.signature_image) {
+      const dims = await loadImageDims(signoff.signature_image)
+      if (dims) {
+        const maxH = 16, maxW = 50
+        let w = maxW, h = (dims.h / dims.w) * w
+        if (h > maxH) { h = maxH; w = (dims.w / dims.h) * h }
+        doc.addImage(signoff.signature_image, 'PNG', MARGIN, y, w, h)
+        y += h + 2
+      }
+    }
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8.5)
+    doc.setTextColor(...INK_SOFT)
+    doc.text(
+      `${signoff.signatory_name} — signed ${new Date(signoff.signed_at).toLocaleString()} — consent recorded — hash ${(signoff.content_hash || '').slice(0, 16)}...`,
+      MARGIN, y
+    )
+    y += 10
+  }
+
+  await signRow('Lead Auditor', signoffs.lead_auditor)
+  await signRow('Auditee Representative', signoffs.auditee_rep)
 
   await addPhotoAppendix(doc, allScopedClauses, checklist)
 

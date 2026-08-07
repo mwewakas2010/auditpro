@@ -47,6 +47,20 @@ function imageFormat(src) {
   return 'JPEG'
 }
 
+function footer(doc, template) {
+  const pageCount = doc.internal.getNumberOfPages()
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+    doc.setDrawColor(...LINE)
+    doc.line(MARGIN, PAGE_H - 14, PAGE_W - MARGIN, PAGE_H - 14)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(...INK_SOFT)
+    doc.text(`${template.document_reference} Rev ${template.revision_number} — ${template.name}`, MARGIN, PAGE_H - 9)
+    doc.text(`Page ${i} of ${pageCount}`, PAGE_W - MARGIN, PAGE_H - 9, { align: 'right' })
+  }
+}
+
 async function addPhotoAppendix(doc, categories, responses) {
   const CELL_W = 42, CELL_H = 32, GAP = 4, PER_ROW = 4
 
@@ -128,21 +142,7 @@ async function addPhotoAppendix(doc, categories, responses) {
   }
 }
 
-function footer(doc, template) {
-  const pageCount = doc.internal.getNumberOfPages()
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i)
-    doc.setDrawColor(...LINE)
-    doc.line(MARGIN, PAGE_H - 14, PAGE_W - MARGIN, PAGE_H - 14)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(8)
-    doc.setTextColor(...INK_SOFT)
-    doc.text(`${template.document_reference} Rev ${template.revision_number} — ${template.name}`, MARGIN, PAGE_H - 9)
-    doc.text(`Page ${i} of ${pageCount}`, PAGE_W - MARGIN, PAGE_H - 9, { align: 'right' })
-  }
-}
-
-export async function generateCCVPdf({ template, categories, meta, responses, company }) {
+export async function generateCCVPdf({ template, categories, meta, responses, company, signoff }) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
 
   // ================= HEADER =================
@@ -274,6 +274,7 @@ export async function generateCCVPdf({ template, categories, meta, responses, co
     doc.setFontSize(9.5)
     doc.setTextColor(...INK_SOFT)
     doc.text('No non-compliant items were identified during this verification.', MARGIN, y)
+    y += 8
   } else {
     autoTable(doc, {
       startY: y,
@@ -285,6 +286,48 @@ export async function generateCCVPdf({ template, categories, meta, responses, co
       head: [['No.', 'Action', 'Responsible Person', 'Due Date']],
       body: recommendations.map((r, i) => [i + 1, `[${r.itemNumber}] ${r.action}`, r.responsible, r.dueDate]),
     })
+    y = doc.lastAutoTable.finalY + 8
+  }
+
+  // ================= SIGN-OFF =================
+  if (y > PAGE_H - 50) { doc.addPage(); y = 20 }
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(12)
+  doc.setTextColor(...NAVY)
+  doc.text('SIGN-OFF', MARGIN, y)
+  y += 8
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9.5)
+  doc.setTextColor(...INK)
+  doc.text('Assessor', MARGIN, y)
+  y += 5
+
+  if (!signoff) {
+    doc.setFont('helvetica', 'italic')
+    doc.setFontSize(9)
+    doc.setTextColor(...INK_SOFT)
+    doc.text('Not signed', MARGIN, y)
+    y += 10
+  } else {
+    if (signoff.signature_image) {
+      const dims = await loadImageDims(signoff.signature_image)
+      if (dims) {
+        const maxH = 16, maxW = 50
+        let w = maxW, h = (dims.h / dims.w) * w
+        if (h > maxH) { h = maxH; w = (dims.w / dims.h) * h }
+        doc.addImage(signoff.signature_image, 'PNG', MARGIN, y, w, h)
+        y += h + 2
+      }
+    }
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8.5)
+    doc.setTextColor(...INK_SOFT)
+    doc.text(
+      `${signoff.signatory_name} — signed ${new Date(signoff.signed_at).toLocaleString()} — consent recorded — hash ${(signoff.content_hash || '').slice(0, 16)}...`,
+      MARGIN, y
+    )
+    y += 10
   }
 
   await addPhotoAppendix(doc, categories, responses)

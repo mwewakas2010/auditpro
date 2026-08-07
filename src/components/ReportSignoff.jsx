@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { generateAuditPdf } from '../utils/pdfExport'
 import { getStandardInfo } from '../data/standards'
+import { signAudit, loadAuditSignoffs, getSavedSignature, saveSignatureForReuse } from '../lib/signatureRepo'
+import SignaturePad from './SignaturePad.jsx'
 
 function conclusionOptions(policyName) {
   return [
@@ -22,12 +24,45 @@ function conclusionOptions(policyName) {
   ]
 }
 
-export default function ReportSignoff({ audit, setAudit, signoffs, setSignoffs, checklist, scope, clauses, reportBrandName }) {
+export default function ReportSignoff({ audit, setAudit, checklist, scope, clauses, reportBrandName }) {
   const CONCLUSIONS = conclusionOptions(getStandardInfo(audit.standard).system.replace(' Management System', '').toLowerCase())
   const [reviewState, setReviewState] = useState({ loading: false, issues: null, rawFallback: null, error: null })
+  const [signoffs, setSignoffs] = useState({ lead_auditor: null, auditee_rep: null })
+  const [savedSignature, setSavedSignature] = useState(null)
+  const [signError, setSignError] = useState('')
 
-  const sign = (role, name) => {
-    setSignoffs({ ...signoffs, [role]: { name, date: new Date().toLocaleDateString() } })
+  useEffect(() => {
+    if (audit.id) loadAuditSignoffs(audit.id).then(setSignoffs).catch(() => {})
+    getSavedSignature().then(setSavedSignature).catch(() => {})
+  }, [audit.id])
+
+  const buildContentSnapshot = () => ({
+    conclusion: audit.conclusion,
+    scope_text: audit.scope_text,
+    checklistStatuses: Object.fromEntries(
+      Object.entries(checklist).map(([code, c]) => [code, { status: c.status, evidenceText: c.evidenceText }])
+    ),
+  })
+
+  const handleSign = async (role, name, sigData) => {
+    setSignError('')
+    if (!audit.id) {
+      setSignError('Save the audit at least once before signing.')
+      return
+    }
+    try {
+      await signAudit(audit.id, role, {
+        signatureImage: sigData.signatureImage,
+        signatoryName: sigData.signatoryName || name,
+        consentAccepted: sigData.consentAccepted,
+        userAgent: sigData.userAgent,
+        contentSnapshot: buildContentSnapshot(),
+      })
+      const fresh = await loadAuditSignoffs(audit.id)
+      setSignoffs(fresh)
+    } catch (err) {
+      setSignError(err.message)
+    }
   }
 
   const runReview = async () => {
@@ -130,13 +165,11 @@ export default function ReportSignoff({ audit, setAudit, signoffs, setSignoffs, 
             {reviewState.error}
           </div>
         )}
-
         {reviewState.issues && reviewState.issues.length === 0 && (
           <div className="text-[12.5px] text-conform bg-conformbg border border-conform rounded p-3 mt-2">
             No issues found — findings look consistent and adequately evidenced.
           </div>
         )}
-
         {reviewState.issues && reviewState.issues.length > 0 && (
           <div className="flex flex-col gap-2 mt-2">
             {reviewState.issues.map((issue, i) => (
@@ -156,7 +189,6 @@ export default function ReportSignoff({ audit, setAudit, signoffs, setSignoffs, 
             ))}
           </div>
         )}
-
         {reviewState.rawFallback && (
           <div className="text-[12px] text-inksoft bg-paper border border-line rounded p-3 mt-2 whitespace-pre-wrap">
             {reviewState.rawFallback}
@@ -166,36 +198,47 @@ export default function ReportSignoff({ audit, setAudit, signoffs, setSignoffs, 
 
       <div className="bg-white border border-line rounded-md p-6 mb-5">
         <h3 className="font-display text-[15px] font-semibold text-navy mb-4">Sign-off</h3>
+        {signError && <div className="text-xs text-major bg-majorbg border border-major rounded p-2 mb-3">{signError}</div>}
+        {!audit.id && (
+          <div className="text-xs text-minor bg-minorbg border border-minor rounded p-2 mb-3">
+            Save the audit at least once before signing.
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <SignPad
+          <SignoffBlock
             label={`Lead Auditor — ${audit.lead_auditor || '(not set)'}`}
-            signed={signoffs.lead_auditor}
-            onSign={() => sign('lead_auditor', audit.lead_auditor || 'Lead Auditor')}
+            signoff={signoffs.lead_auditor}
+            signatoryName={audit.lead_auditor}
+            savedSignature={savedSignature}
+            onSign={(sigData) => handleSign('lead_auditor', audit.lead_auditor || 'Lead Auditor', sigData)}
+            onSaveForReuse={(img, name) => { saveSignatureForReuse(img, name); setSavedSignature({ signature_image: img, full_name: name }) }}
           />
-          <SignPad
+          <SignoffBlock
             label={`Auditee Representative — ${audit.process_owner || '(not set)'}`}
-            signed={signoffs.auditee_rep}
-            onSign={() => sign('auditee_rep', audit.process_owner || 'Auditee Representative')}
+            signoff={signoffs.auditee_rep}
+            signatoryName={audit.process_owner}
+            savedSignature={savedSignature}
+            onSign={(sigData) => handleSign('auditee_rep', audit.process_owner || 'Auditee Representative', sigData)}
           />
         </div>
       </div>
 
       <div className="flex flex-col md:flex-row gap-3">
         <button
-          className="bg-navy text-white px-5.5 py-2.5 rounded font-medium text-[13.5px] w-full md:w-auto"
           onClick={async () => await generateAuditPdf({ audit, signoffs, checklist, scope, clauses, reportBrandName })}
+          className="bg-navy text-white px-5.5 py-2.5 rounded font-medium text-[13.5px] w-full md:w-auto"
         >
           Export Draft PDF
         </button>
         <button
-          className="bg-white text-navy border-[1.5px] border-navy px-5 py-2.5 rounded font-medium text-[13.5px] w-full md:w-auto"
           onClick={() => alert('Phase 2: generates a matching .docx for editing.')}
+          className="bg-white text-navy border-[1.5px] border-navy px-5 py-2.5 rounded font-medium text-[13.5px] w-full md:w-auto"
         >
           Export Word (.docx)
         </button>
         <button
-          className="bg-white text-navy border-[1.5px] border-navy px-5 py-2.5 rounded font-medium text-[13.5px] w-full md:w-auto"
           onClick={() => setAudit({ ...audit, status: 'final' })}
+          className="bg-white text-navy border-[1.5px] border-navy px-5 py-2.5 rounded font-medium text-[13.5px] w-full md:w-auto"
         >
           Mark as Final
         </button>
@@ -207,22 +250,44 @@ export default function ReportSignoff({ audit, setAudit, signoffs, setSignoffs, 
   )
 }
 
-function SignPad({ label, signed, onSign }) {
+function SignoffBlock({ label, signoff, signatoryName, savedSignature, onSign, onSaveForReuse }) {
+  const [signing, setSigning] = useState(false)
+
+  if (signoff) {
+    return (
+      <div>
+        <label className="block text-[11.5px] font-semibold text-navy2 mb-1.5 uppercase tracking-wide">{label}</label>
+        <div className="border-[1.5px] border-solid border-conform bg-white rounded-md p-3">
+          {signoff.signature_image && (
+            <img src={signoff.signature_image} alt="Signature" className="h-14 object-contain mb-1" />
+          )}
+          <div className="text-xs text-navy font-medium">{signoff.signatory_name}</div>
+          <div className="text-[10.5px] text-inksoft">
+            Signed {new Date(signoff.signed_at).toLocaleString()} • Consent recorded • Hash: {signoff.content_hash?.slice(0, 12)}…
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
-      <label className="block text-[11.5px] font-semibold text-navy2 mb-1.5 uppercase tracking-wide">
-        {label}
-      </label>
-      <div
-        onClick={onSign}
-        className={`border-[1.5px] rounded-md h-[90px] flex items-center justify-center cursor-pointer ${
-          signed
-            ? 'border-solid border-conform bg-white text-navy font-display text-xl'
-            : 'border-dashed border-line bg-[#FCFBF8] text-inksoft text-xs italic font-display'
-        }`}
-      >
-        {signed ? `${signed.name} — ${signed.date}` : 'Click to sign'}
-      </div>
+      <label className="block text-[11.5px] font-semibold text-navy2 mb-1.5 uppercase tracking-wide">{label}</label>
+      {signing ? (
+        <SignaturePad
+          signatoryName={signatoryName}
+          savedSignature={savedSignature}
+          onSaveForReuse={onSaveForReuse}
+          onSign={(sigData) => { onSign(sigData); setSigning(false) }}
+        />
+      ) : (
+        <div
+          onClick={() => setSigning(true)}
+          className="border-[1.5px] border-dashed border-line rounded-md h-[90px] flex items-center justify-center cursor-pointer bg-[#FCFBF8] text-inksoft text-xs italic font-display"
+        >
+          Click to sign
+        </div>
+      )}
     </div>
   )
 }
