@@ -3,8 +3,11 @@ import { loadTemplateStructure, loadCCV, saveCCV, syncPendingCCVs } from '../lib
 import { listCompanies } from '../lib/companyRepo'
 import { saveLocalCCV, getLocalCCV, deleteLocalCCV } from '../lib/offlineStore'
 import { useOnlineStatus } from '../lib/useOnlineStatus'
+import { signCCV, loadCCVSignoffs, getSavedSignature, saveSignatureForReuse } from '../lib/signatureRepo'
 import { generateCCVPdf } from '../utils/ccvPdfExport'
 import CameraCapture from './CameraCapture.jsx'
+import SignaturePad from './SignaturePad.jsx'
+import HazardIcon from './HazardIcon.jsx'
 
 function emptyMeta() {
   return { assessors: '', dateTime: '', location: '', department: '', section: '', status: 'in_progress' }
@@ -26,6 +29,10 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
   const [companiesError, setCompaniesError] = useState('')
   const [cameraOpenFor, setCameraOpenFor] = useState(null)
   const [offlineLoaded, setOfflineLoaded] = useState(false)
+  const [signoffs, setSignoffs] = useState({ assessor: null })
+  const [savedSignature, setSavedSignature] = useState(null)
+  const [signing, setSigning] = useState(false)
+  const [signError, setSignError] = useState('')
   const fileInputs = useRef({})
 
   const online = useOnlineStatus()
@@ -34,7 +41,12 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
 
   useEffect(() => {
     listCompanies().then(setCompanies).catch((err) => setCompaniesError(err.message))
+    getSavedSignature().then(setSavedSignature).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (id) loadCCVSignoffs(id).then(setSignoffs).catch(() => {})
+  }, [id])
 
   useEffect(() => {
     ;(async () => {
@@ -42,8 +54,6 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
         if (ccvId) {
           const local = await getLocalCCV(ccvId)
           if (local && local.pendingSync) {
-            // Unsynced offline edits exist for this CCV - use those rather
-            // than risk overwriting them with (now stale) server data.
             const { template: t, categories: cats } = await loadTemplateStructure(local.templateId)
             setTemplate(t)
             setCategories(cats)
@@ -70,8 +80,6 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
           setMeta(loadedMeta)
           setResponses(result.responses)
           setCompanyId(result.instance.company_id || null)
-          // Cache a non-pending copy so this CCV can still be opened (and
-          // edited offline) even with zero signal next time.
           await saveLocalCCV(ccvId, {
             templateId: result.template.id,
             companyId: result.instance.company_id || null,
@@ -107,8 +115,6 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
     })()
   }, [ccvId, templateId])
 
-  // Auto-save to local storage on every change, as a safety net - works
-  // regardless of online/offline status.
   useEffect(() => {
     if (!hasInitiallyLoaded.current || !template) return
     const t = setTimeout(() => {
@@ -117,7 +123,6 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
     return () => clearTimeout(t)
   }, [meta, responses, companyId, localId, template])
 
-  // Sync automatically the moment connectivity returns.
   useEffect(() => {
     if (online && wasOffline.current) {
       syncPendingCCVs().then(({ succeeded, failed, total, synced }) => {
@@ -214,6 +219,32 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
     setSaving(false)
   }
 
+  const handleSign = async (sigData) => {
+    setSignError('')
+    if (!id) {
+      setSignError('Save the CCV at least once before signing.')
+      return
+    }
+    try {
+      const contentSnapshot = {
+        meta,
+        responses: Object.fromEntries(Object.entries(responses).map(([k, r]) => [k, { compliance: r.compliance, actionText: r.actionText }])),
+      }
+      await signCCV(id, 'assessor', {
+        signatureImage: sigData.signatureImage,
+        signatoryName: sigData.signatoryName || meta.assessors,
+        consentAccepted: sigData.consentAccepted,
+        userAgent: sigData.userAgent,
+        contentSnapshot,
+      })
+      const fresh = await loadCCVSignoffs(id)
+      setSignoffs(fresh)
+      setSigning(false)
+    } catch (err) {
+      setSignError(err.message)
+    }
+  }
+
   if (loading) return <div className="p-9 text-inksoft text-sm">Loading…</div>
   if (loadError) {
     return (
@@ -234,7 +265,12 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
     <div className="p-4 md:p-9">
       <div className="flex flex-col md:flex-row justify-between md:items-start gap-3 mb-5">
         <div>
-          <h1 className="font-display text-xl font-semibold text-navy">{template.name}</h1>
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded bg-navy/5 border border-line flex items-center justify-center flex-shrink-0">
+              <HazardIcon templateName={template.name} size={19} className="text-navy" />
+            </div>
+            <h1 className="font-display text-xl font-semibold text-navy">{template.name}</h1>
+          </div>
           <div className="font-mono text-[11px] text-inksoft mt-0.5">
             {template.document_reference} • Rev {template.revision_number} • {template.total_pages} pages • Issued{' '}
             {template.date_of_issue} • Next review {template.date_of_next_review}
@@ -249,7 +285,7 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
           </button>
           {id && (
             <button
-              onClick={async () => await generateCCVPdf({ template, categories, meta, responses, company: companies.find((c) => c.id === companyId) })}
+              onClick={async () => await generateCCVPdf({ template, categories, meta, responses, company: companies.find((c) => c.id === companyId), signoff: signoffs.assessor })}
               className="bg-white text-navy border-[1.5px] border-navy px-4 py-2 rounded text-sm font-medium"
             >
               Export PDF
@@ -424,6 +460,43 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
           </div>
         )
       })}
+
+      <div className="bg-white border border-line rounded-md p-4 md:p-5 mt-5">
+        <h3 className="font-display text-[15px] font-semibold text-navy mb-3">Sign-off</h3>
+        {signError && <div className="text-xs text-major bg-majorbg border border-major rounded p-2 mb-3">{signError}</div>}
+        {!id && (
+          <div className="text-xs text-minor bg-minorbg border border-minor rounded p-2 mb-3">
+            Save the CCV at least once before signing.
+          </div>
+        )}
+        {signoffs.assessor ? (
+          <div className="border-[1.5px] border-solid border-conform bg-white rounded-md p-3 max-w-sm">
+            {signoffs.assessor.signature_image && (
+              <img src={signoffs.assessor.signature_image} alt="Signature" className="h-14 object-contain mb-1" />
+            )}
+            <div className="text-xs text-navy font-medium">{signoffs.assessor.signatory_name}</div>
+            <div className="text-[10.5px] text-inksoft">
+              Signed {new Date(signoffs.assessor.signed_at).toLocaleString()} • Consent recorded • Hash: {signoffs.assessor.content_hash?.slice(0, 12)}…
+            </div>
+          </div>
+        ) : signing ? (
+          <div className="max-w-sm">
+            <SignaturePad
+              signatoryName={meta.assessors}
+              savedSignature={savedSignature}
+              onSaveForReuse={(img, name) => { saveSignatureForReuse(img, name); setSavedSignature({ signature_image: img, full_name: name }) }}
+              onSign={handleSign}
+            />
+          </div>
+        ) : (
+          <div
+            onClick={() => setSigning(true)}
+            className="border-[1.5px] border-dashed border-line rounded-md h-[90px] max-w-sm flex items-center justify-center cursor-pointer bg-[#FCFBF8] text-inksoft text-xs italic font-display"
+          >
+            Click to sign
+          </div>
+        )}
+      </div>
 
       {cameraOpenFor && (
         <CameraCapture
