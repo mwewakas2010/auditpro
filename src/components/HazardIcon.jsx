@@ -1,28 +1,33 @@
-import { Truck, Building2, DoorClosed, Mountain, FlaskConical, Settings, Zap, Weight, Bomb, Flame, ShieldQuestion } from 'lucide-react'
+import { Flame } from 'lucide-react'
 
-// Keyed by (partial, case-insensitive) match against the template name, so
-// this doesn't break if a template's exact wording changes slightly. Covers
-// the 6 existing CCV templates plus 4 more prepared for whenever those get
-// built (Stored Energy, Lifting, Blasting & Explosives, Fire).
-const HAZARD_ICON_MAP = [
-  { match: /mobile equipment/i, icon: Truck },
-  { match: /fall from heights/i, icon: Building2 },
-  { match: /confined space/i, icon: DoorClosed },
-  { match: /fall of ground/i, icon: Mountain },
-  { match: /hazardous substances|chemicals/i, icon: FlaskConical },
-  { match: /rotating equipment/i, icon: Settings },
-  { match: /stored energy/i, icon: Zap },
-  { match: /lifting/i, icon: Weight },
-  { match: /blasting|explosives/i, icon: Bomb },
-  { match: /^fire\b|fire critical/i, icon: Flame },
+// Real hazard icons, cropped from Barrick's official Fatal Risk reference
+// material - stored as static assets in /public/hazard-icons/. Fire isn't
+// available as a real image yet (not in the reference material provided),
+// so it falls back to a library icon until that one's supplied.
+const HAZARD_IMAGE_MAP = [
+  { match: /mobile equipment/i, src: '/hazard-icons/mobile-equipment.png' },
+  { match: /fall from heights|falling from heights/i, src: '/hazard-icons/falling-from-heights.png' },
+  { match: /confined space/i, src: '/hazard-icons/confined-space.png' },
+  { match: /fall of ground/i, src: '/hazard-icons/fall-of-ground.png' },
+  { match: /hazardous substances|chemicals/i, src: '/hazard-icons/hazardous-substances.png' },
+  { match: /rotating equipment/i, src: '/hazard-icons/rotating-equipment.png' },
+  { match: /stored energy/i, src: '/hazard-icons/stored-energy.png' },
+  { match: /lifting/i, src: '/hazard-icons/lifting.png' },
+  { match: /blasting|explosives/i, src: '/hazard-icons/blasting-explosives.png' },
 ]
 
-export function getHazardIcon(templateName) {
-  const found = HAZARD_ICON_MAP.find((entry) => entry.match.test(templateName || ''))
-  return found ? found.icon : ShieldQuestion
-}
-
 export default function HazardIcon({ templateName, size = 18, className = '' }) {
-  const Icon = getHazardIcon(templateName)
-  return <Icon size={size} className={className} />
+  const found = HAZARD_IMAGE_MAP.find((entry) => entry.match.test(templateName || ''))
+  if (found) {
+    return (
+      <img
+        src={found.src}
+        alt=""
+        style={{ width: size, height: size }}
+        className={`object-contain ${className}`}
+      />
+    )
+  }
+  // Fire (no real image yet) and anything unmatched
+  return <Flame size={size} className={className} />
 }
