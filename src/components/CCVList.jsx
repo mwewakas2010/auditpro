@@ -65,7 +65,7 @@ export default function CCVList({ onOpen, onNew }) {
                 onClick={() => onNew(t.id)}
                 className="text-left px-3 py-2 border border-line rounded hover:border-navy2 text-sm flex items-center gap-2.5"
               >
-                <HazardIcon templateName={t.name} size={18} className="text-navy2 flex-shrink-0" />
+                <HazardIcon templateName={t.name} size={30} className="text-navy2 flex-shrink-0" />
                 <span>
                   {t.name} <span className="text-inksoft text-xs">({t.document_reference} Rev {t.revision_number})</span>
                 </span>
@@ -98,8 +98,8 @@ export default function CCVList({ onOpen, onNew }) {
               <div className="font-mono text-xs text-inksoft bg-paper border border-line rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5">
                 {index + 1}
               </div>
-              <div className="w-8 h-8 rounded bg-navy/5 border border-line flex items-center justify-center flex-shrink-0 mt-0.5">
-                <HazardIcon templateName={c.checklist_templates?.name} size={17} className="text-navy" />
+              <div className="w-11 h-11 rounded bg-navy/5 border border-line flex items-center justify-center flex-shrink-0 mt-0.5">
+                <HazardIcon templateName={c.checklist_templates?.name} size={32} className="text-navy" />
               </div>
               <div>
                 <div className="font-medium text-[14px]">

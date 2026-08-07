@@ -266,8 +266,8 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
       <div className="flex flex-col md:flex-row justify-between md:items-start gap-3 mb-5">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded bg-navy/5 border border-line flex items-center justify-center flex-shrink-0">
-              <HazardIcon templateName={template.name} size={19} className="text-navy" />
+            <div className="w-14 h-14 rounded bg-navy/5 border border-line flex items-center justify-center flex-shrink-0">
+              <HazardIcon templateName={template.name} size={44} className="text-navy" />
             </div>
             <h1 className="font-display text-xl font-semibold text-navy">{template.name}</h1>
           </div>
