@@ -4,9 +4,12 @@ import { getAccessState } from '../lib/orgRepo'
 import { AUDIT_TABS } from './AuditEditor.jsx'
 import AuditList from './AuditList.jsx'
 import AuditEditor from './AuditEditor.jsx'
+import FLRAList from './FLRAList.jsx'
+import FLRAEditor from './FLRAEditor.jsx'
 import Billing from './Billing.jsx'
 import {
   ClipboardList,
+  ClipboardCheck,
   FileText,
   ListChecks,
   Search,
@@ -18,6 +21,7 @@ import {
 
 const APP_NAV = [
   { key: 'audits', label: 'My Audits', icon: ClipboardList },
+  { key: 'flras', label: 'FLRAs', icon: ClipboardCheck },
   { key: 'billing', label: 'Billing & Plans', icon: CreditCard },
 ]
 
@@ -29,21 +33,21 @@ const AUDIT_TAB_MOBILE = {
 }
 
 export default function SubscriberShell({ organization }) {
-  const [section, setSection] = useState('audits') // 'audits' | 'editor' | 'billing'
+  const [section, setSection] = useState('audits') // 'audits' | 'editor' | 'flras' | 'flra-editor' | 'billing'
   const [auditId, setAuditId] = useState(null)
   const [auditTab, setAuditTab] = useState('setup')
   const [editorKey, setEditorKey] = useState(0)
 
+  const [flraId, setFlraId] = useState(null)
+  const [flraEditorKey, setFlraEditorKey] = useState(0)
+
   const accessState = getAccessState(organization)
-  // If access is restricted (trial expired, payment failed past grace, or
-  // canceled), the Billing screen is the ONLY thing shown, regardless of
-  // which nav item was clicked - existing data is untouched, just not
-  // editable until a plan is chosen.
   const effectiveSection = accessState.access === 'restricted' ? 'billing' : section
 
   const goToSection = (key) => {
     setSection(key)
     setAuditId(null)
+    setFlraId(null)
   }
 
   const openAudit = (id) => {
@@ -52,8 +56,14 @@ export default function SubscriberShell({ organization }) {
     setEditorKey((k) => k + 1)
     setSection('editor')
   }
-
   const newAudit = () => openAudit(null)
+
+  const openFLRA = (id) => {
+    setFlraId(id)
+    setFlraEditorKey((k) => k + 1)
+    setSection('flra-editor')
+  }
+  const newFLRA = () => openFLRA(null)
 
   return (
     <div className="flex flex-col md:flex-row h-screen overflow-hidden">
@@ -65,6 +75,13 @@ export default function SubscriberShell({ organization }) {
               <ArrowLeft size={18} /> My Audits
             </button>
             <div className="text-xs font-mono text-[#9FB0C9]">{AUDIT_TAB_MOBILE[auditTab]?.label}</div>
+          </>
+        ) : effectiveSection === 'flra-editor' ? (
+          <>
+            <button onClick={() => goToSection('flras')} className="flex items-center gap-1.5 text-sm">
+              <ArrowLeft size={18} /> FLRAs
+            </button>
+            <div className="text-xs font-mono text-[#9FB0C9]">FLRA</div>
           </>
         ) : (
           <>
@@ -106,7 +123,7 @@ export default function SubscriberShell({ organization }) {
               key={item.key}
               onClick={() => goToSection(item.key)}
               className={`px-[22px] py-[13px] text-sm cursor-pointer border-l-[3px] transition-colors flex items-center gap-2 ${
-                effectiveSection === item.key
+                effectiveSection === item.key || (item.key === 'flras' && effectiveSection === 'flra-editor')
                   ? 'bg-white/10 border-gold text-white'
                   : 'border-transparent text-[#C7CEDA] hover:bg-white/5'
               }`}
@@ -155,6 +172,7 @@ export default function SubscriberShell({ organization }) {
       {/* Main content */}
       <div className="flex-1 min-w-0 overflow-y-auto pb-16 md:pb-0">
         {effectiveSection === 'audits' && <AuditList onOpen={openAudit} onNew={newAudit} />}
+        {effectiveSection === 'flras' && <FLRAList onOpen={openFLRA} onNew={newFLRA} />}
         {effectiveSection === 'billing' && <Billing organization={organization} accessState={accessState} />}
         {effectiveSection === 'editor' && (
           <AuditEditor
@@ -167,6 +185,9 @@ export default function SubscriberShell({ organization }) {
             organizationId={organization.id}
             reportBrandName={organization.name}
           />
+        )}
+        {effectiveSection === 'flra-editor' && (
+          <FLRAEditor key={flraEditorKey} flraId={flraId} organizationId={organization.id} onExit={() => goToSection('flras')} />
         )}
       </div>
 
@@ -192,7 +213,7 @@ export default function SubscriberShell({ organization }) {
             })
           : APP_NAV.map((item) => {
               const Icon = item.icon
-              const active = effectiveSection === item.key
+              const active = effectiveSection === item.key || (item.key === 'flras' && effectiveSection === 'flra-editor')
               return (
                 <button
                   key={item.key}

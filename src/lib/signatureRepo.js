@@ -90,3 +90,31 @@ export async function loadCCVSignoffs(ccvInstanceId) {
   data.forEach((r) => { result[r.role] = r })
   return result
 }
+
+export async function signFLRA(flraId, role, { signatureImage, signatoryName, consentAccepted, userAgent, contentSnapshot }) {
+  const { data: userData } = await supabase.auth.getUser()
+  const contentHash = await hashContent(contentSnapshot)
+  const { error } = await supabase.from('flra_signoffs').upsert(
+    {
+      flra_id: flraId,
+      role,
+      signatory_name: signatoryName,
+      signature_image: signatureImage,
+      consent_accepted: consentAccepted,
+      user_agent: userAgent,
+      content_hash: contentHash,
+      signed_by_user_id: userData?.user?.id,
+      signed_at: new Date().toISOString(),
+    },
+    { onConflict: 'flra_id,role' }
+  )
+  if (error) throw error
+}
+
+export async function loadFLRASignoffs(flraId) {
+  const { data, error } = await supabase.from('flra_signoffs').select('*').eq('flra_id', flraId)
+  if (error) throw error
+  const result = {}
+  data.forEach((r) => { result[r.role] = r })
+  return result
+}

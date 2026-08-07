@@ -1,9 +1,10 @@
 import { openDB } from 'idb'
 
 const DB_NAME = 'auditpro-offline'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const AUDITS_STORE = 'audits'
 const CCVS_STORE = 'ccvs'
+const FLRAS_STORE = 'flras'
 const COMPANIES_CACHE_KEY = 'companies-cache'
 
 let dbPromise = null
@@ -17,15 +18,17 @@ function getDB() {
         if (!db.objectStoreNames.contains(CCVS_STORE)) {
           db.createObjectStore(CCVS_STORE, { keyPath: 'localId' })
         }
+        if (!db.objectStoreNames.contains(FLRAS_STORE)) {
+          db.createObjectStore(FLRAS_STORE, { keyPath: 'localId' })
+        }
       },
     })
   }
   return dbPromise
 }
 
-// Saves the full working state of an audit under a local key. Called
-// automatically as the auditor works, regardless of online/offline status,
-// so nothing is ever lost if the tab closes or signal drops mid-edit.
+// ---- Audits ----
+
 export async function saveLocalAudit(localId, { audit, scope, checklist, signoffs, pendingSync, organizationId }) {
   const db = await getDB()
   await db.put(AUDITS_STORE, {
@@ -50,15 +53,13 @@ export async function deleteLocalAudit(localId) {
   await db.delete(AUDITS_STORE, localId)
 }
 
-// Returns every locally-saved audit that has changes not yet pushed to
-// Supabase - used by the sync-on-reconnect routine.
 export async function listPendingAudits() {
   const db = await getDB()
   const all = await db.getAll(AUDITS_STORE)
   return all.filter((a) => a.pendingSync)
 }
 
-// ---- Same pattern as above, for CCVs ----
+// ---- CCVs ----
 
 export async function saveLocalCCV(localId, { templateId, companyId, meta, responses, pendingSync }) {
   const db = await getDB()
@@ -89,14 +90,43 @@ export async function listPendingCCVs() {
   return all.filter((c) => c.pendingSync)
 }
 
+// ---- FLRAs ----
+
+export async function saveLocalFLRA(localId, { instance, hazardRows, safetyChecks, pendingSync }) {
+  const db = await getDB()
+  await db.put(FLRAS_STORE, {
+    localId,
+    instance,
+    hazardRows,
+    safetyChecks,
+    pendingSync: !!pendingSync,
+    savedAt: new Date().toISOString(),
+  })
+}
+
+export async function getLocalFLRA(localId) {
+  const db = await getDB()
+  return db.get(FLRAS_STORE, localId)
+}
+
+export async function deleteLocalFLRA(localId) {
+  const db = await getDB()
+  await db.delete(FLRAS_STORE, localId)
+}
+
+export async function listPendingFLRAs() {
+  const db = await getDB()
+  const all = await db.getAll(FLRAS_STORE)
+  return all.filter((f) => f.pendingSync)
+}
+
 // Simple localStorage cache of the companies list, so the Setup screen's
-// Company/Department dropdowns aren't just empty if you open a new audit
-// with no connection (uses whatever was last successfully fetched online).
+// company dropdown still has something to show when opened with no signal.
 export function cacheCompaniesList(companies) {
   try {
     localStorage.setItem(COMPANIES_CACHE_KEY, JSON.stringify(companies))
   } catch {
-    // ignore quota errors - this is a convenience cache, not critical data
+    // ignore - non-critical
   }
 }
 

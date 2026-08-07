@@ -7,11 +7,14 @@ import Companies from './Companies.jsx'
 import AuditEditor from './AuditEditor.jsx'
 import CCVList from './CCVList.jsx'
 import CCVEditor from './CCVEditor.jsx'
+import FLRAList from './FLRAList.jsx'
+import FLRAEditor from './FLRAEditor.jsx'
 import {
   LayoutDashboard,
   ClipboardList,
   Building2,
   ShieldCheck,
+  ClipboardCheck,
   FileText,
   ListChecks,
   Search,
@@ -24,11 +27,10 @@ const APP_NAV = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'audits', label: 'My Audits', icon: ClipboardList },
   { key: 'ccvs', label: 'Critical Controls', icon: ShieldCheck },
+  { key: 'flras', label: 'FLRAs', icon: ClipboardCheck },
   { key: 'companies', label: 'Manage Companies', icon: Building2 },
 ]
 
-// Shorter labels for the bottom tab bar - "Conclusion & Sign-off" doesn't
-// fit under a small icon the way it does in the desktop sidebar.
 const AUDIT_TAB_MOBILE = {
   setup: { label: 'Setup', icon: FileText },
   checklist: { label: 'Checklist', icon: ListChecks },
@@ -37,7 +39,7 @@ const AUDIT_TAB_MOBILE = {
 }
 
 export default function Shell() {
-  const [section, setSection] = useState('dashboard') // 'dashboard' | 'audits' | 'companies' | 'editor' | 'ccvs' | 'ccv-editor'
+  const [section, setSection] = useState('dashboard') // 'dashboard' | 'audits' | 'companies' | 'editor' | 'ccvs' | 'ccv-editor' | 'flras' | 'flra-editor'
   const [auditId, setAuditId] = useState(null)
   const [auditTab, setAuditTab] = useState('setup')
   const [editorKey, setEditorKey] = useState(0)
@@ -46,10 +48,14 @@ export default function Shell() {
   const [ccvTemplateId, setCcvTemplateId] = useState(null)
   const [ccvEditorKey, setCcvEditorKey] = useState(0)
 
+  const [flraId, setFlraId] = useState(null)
+  const [flraEditorKey, setFlraEditorKey] = useState(0)
+
   const goToSection = (key) => {
     setSection(key)
     setAuditId(null)
     setCcvId(null)
+    setFlraId(null)
   }
 
   const openAudit = (id) => {
@@ -73,9 +79,16 @@ export default function Shell() {
     setSection('ccv-editor')
   }
 
+  const openFLRA = (id) => {
+    setFlraId(id)
+    setFlraEditorKey((k) => k + 1)
+    setSection('flra-editor')
+  }
+  const newFLRA = () => openFLRA(null)
+
   return (
     <div className="flex flex-col md:flex-row h-screen overflow-hidden">
-      {/* ===== Mobile top bar (hidden on desktop) ===== */}
+      {/* ===== Mobile top bar ===== */}
       <div className="md:hidden bg-navy text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
         {section === 'editor' ? (
           <>
@@ -91,6 +104,13 @@ export default function Shell() {
             </button>
             <div className="text-xs font-mono text-[#9FB0C9]">CCV</div>
           </>
+        ) : section === 'flra-editor' ? (
+          <>
+            <button onClick={() => goToSection('flras')} className="flex items-center gap-1.5 text-sm">
+              <ArrowLeft size={18} /> FLRAs
+            </button>
+            <div className="text-xs font-mono text-[#9FB0C9]">FLRA</div>
+          </>
         ) : (
           <>
             <div className="font-display font-bold text-lg">AuditPro</div>
@@ -101,7 +121,7 @@ export default function Shell() {
         )}
       </div>
 
-      {/* ===== Desktop sidebar (unchanged, hidden on mobile) ===== */}
+      {/* ===== Desktop sidebar ===== */}
       <div className="hidden md:flex w-[230px] flex-shrink-0 bg-navy text-slate-100 flex-col">
         <div className="px-[22px] pt-[26px] pb-[18px] border-b border-white/10">
           <div className="font-display font-bold text-2xl text-white">AuditPro</div>
@@ -116,7 +136,9 @@ export default function Shell() {
               key={item.key}
               onClick={() => goToSection(item.key)}
               className={`px-[22px] py-[13px] text-sm cursor-pointer border-l-[3px] flex items-center gap-2 transition-colors ${
-                section === item.key || (item.key === 'ccvs' && section === 'ccv-editor')
+                section === item.key ||
+                (item.key === 'ccvs' && section === 'ccv-editor') ||
+                (item.key === 'flras' && section === 'flra-editor')
                   ? 'bg-white/10 border-gold text-white'
                   : 'border-transparent text-[#C7CEDA] hover:bg-white/5'
               }`}
@@ -167,6 +189,7 @@ export default function Shell() {
         {section === 'dashboard' && <Dashboard />}
         {section === 'audits' && <AuditList onOpen={openAudit} onNew={newAudit} />}
         {section === 'ccvs' && <CCVList onOpen={openCCV} onNew={newCCV} />}
+        {section === 'flras' && <FLRAList onOpen={openFLRA} onNew={newFLRA} />}
         {section === 'companies' && <Companies />}
         {section === 'editor' && (
           <AuditEditor
@@ -180,9 +203,12 @@ export default function Shell() {
         {section === 'ccv-editor' && (
           <CCVEditor key={ccvEditorKey} ccvId={ccvId} templateId={ccvTemplateId} onExit={() => goToSection('ccvs')} />
         )}
+        {section === 'flra-editor' && (
+          <FLRAEditor key={flraEditorKey} flraId={flraId} organizationId={null} onExit={() => goToSection('flras')} />
+        )}
       </div>
 
-      {/* ===== Mobile bottom tab bar (hidden on desktop) ===== */}
+      {/* ===== Mobile bottom tab bar ===== */}
       <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-navy border-t border-white/10 flex">
         {section === 'editor'
           ? AUDIT_TABS.map((tab) => {
@@ -204,7 +230,10 @@ export default function Shell() {
             })
           : APP_NAV.map((item) => {
               const Icon = item.icon
-              const active = section === item.key || (item.key === 'ccvs' && section === 'ccv-editor')
+              const active =
+                section === item.key ||
+                (item.key === 'ccvs' && section === 'ccv-editor') ||
+                (item.key === 'flras' && section === 'flra-editor')
               return (
                 <button
                   key={item.key}
@@ -214,7 +243,7 @@ export default function Shell() {
                   }`}
                 >
                   <Icon size={20} />
-                  {item.key === 'companies' ? 'Companies' : item.key === 'ccvs' ? 'CCVs' : item.label}
+                  {item.key === 'companies' ? 'Companies' : item.key === 'ccvs' ? 'CCVs' : item.key === 'flras' ? 'FLRAs' : item.label}
                 </button>
               )
             })}
