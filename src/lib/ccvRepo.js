@@ -40,7 +40,7 @@ export async function loadTemplateStructure(templateId) {
 export async function listCCVs() {
   const { data, error } = await supabase
     .from('ccv_instances')
-    .select('id, location, department, section, date_time, status, created_at, checklist_templates(name), companies(name)')
+    .select('id, location, department, section, task, site, date_time, status, created_at, checklist_templates(name), companies(name)')
     .order('created_at', { ascending: false })
   if (error) throw error
   return data
@@ -60,16 +60,6 @@ export async function loadCCV(id) {
     .eq('id', id)
     .single()
   if (iErr) throw iErr
-
-  let company = null
-  if (instance.company_id) {
-    const { data: companyRow } = await supabase
-      .from('companies')
-      .select('id, name, logo_url')
-      .eq('id', instance.company_id)
-      .maybeSingle()
-    company = companyRow || null
-  }
 
   const { template, categories } = await loadTemplateStructure(instance.template_id)
 
@@ -97,7 +87,7 @@ export async function loadCCV(id) {
     }
   })
 
-  return { instance, template, categories, responses, company }
+  return { instance, template, categories, responses }
 }
 
 // ---------- Save (insert or update) a CCV instance ----------
@@ -115,6 +105,9 @@ export async function saveCCV({ ccvId, templateId, companyId, meta, responses })
     location: meta.location,
     department: meta.department,
     section: meta.section,
+    task: meta.task || null,
+    site: meta.site || null,
+    is_unplanned: !!meta.isUnplanned,
     status: meta.status || 'in_progress',
     updated_at: new Date().toISOString(),
   }
@@ -172,13 +165,12 @@ export async function saveCCV({ ccvId, templateId, companyId, meta, responses })
 }
 
 // Pushes every locally-queued (offline-created/edited) CCV up to Supabase,
-// one at a time. Mirrors syncPendingAudits - called automatically when the
-// app detects it's back online.
+// one at a time.
 export async function syncPendingCCVs() {
   const pending = await listPendingCCVs()
   let succeeded = 0
   let failed = 0
-  const synced = [] // { localId, realId } for the caller to reconcile an open editor against
+  const synced = []
   for (const entry of pending) {
     try {
       const realCcvId = entry.localId.startsWith('local-') ? null : entry.localId

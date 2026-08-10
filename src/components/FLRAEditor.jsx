@@ -4,7 +4,7 @@ import { listCompanies } from '../lib/companyRepo'
 import { saveLocalFLRA, getLocalFLRA, deleteLocalFLRA } from '../lib/offlineStore'
 import { useOnlineStatus } from '../lib/useOnlineStatus'
 import { signFLRA, loadFLRASignoffs, getSavedSignature, saveSignatureForReuse } from '../lib/signatureRepo'
-import { SAFETY_CHECK_ITEMS, FATAL_RISK_CONTROLS } from '../data/flraContent'
+import { SAFETY_CHECK_ITEMS, FATAL_RISK_CONTROLS, FLRA_INSTRUCTIONS, HIERARCHY_OF_CONTROLS } from '../data/flraContent'
 import { generateFLRAPdf } from '../utils/flraPdfExport'
 import HazardIcon from './HazardIcon.jsx'
 import SignaturePad from './SignaturePad.jsx'
@@ -29,14 +29,16 @@ function emptyHazardRows() {
   return Array.from({ length: 6 }, () => ({ hazardText: '', controlText: '' }))
 }
 
-export default function FLRAEditor({ flraId, organizationId, onExit }) {
+export default function FLRAEditor({ flraId, organizationId, initialCompanyId, initialAcknowledgedAt, onExit }) {
   const [id, setId] = useState(flraId)
   const [localId, setLocalId] = useState(() => flraId || `local-${crypto.randomUUID()}`)
   const [meta, setMeta] = useState(emptyMeta)
-  const [companyId, setCompanyId] = useState(null)
+  const [companyId, setCompanyId] = useState(initialCompanyId || null)
   const [companies, setCompanies] = useState([])
   const [hazardRows, setHazardRows] = useState(emptyHazardRows)
   const [safetyChecks, setSafetyChecks] = useState({})
+  const [riskControls, setRiskControls] = useState({})
+  const [acknowledgedAt] = useState(initialAcknowledgedAt || null)
   const [signoffs, setSignoffs] = useState({ employee: null, supervisor: null })
   const [savedSignature, setSavedSignature] = useState(null)
   const [signingRole, setSigningRole] = useState(null)
@@ -46,6 +48,7 @@ export default function FLRAEditor({ flraId, organizationId, onExit }) {
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
   const [offlineLoaded, setOfflineLoaded] = useState(false)
+  const [showInstructions, setShowInstructions] = useState(false)
 
   const online = useOnlineStatus()
 
@@ -68,6 +71,7 @@ export default function FLRAEditor({ flraId, organizationId, onExit }) {
             setCompanyId(local.instance.companyId || null)
             setHazardRows(local.hazardRows)
             setSafetyChecks(local.safetyChecks)
+            setRiskControls(local.riskControls || {})
             setOfflineLoaded(true)
             setLoading(false)
             return
@@ -88,10 +92,12 @@ export default function FLRAEditor({ flraId, organizationId, onExit }) {
           setCompanyId(result.instance.company_id || null)
           setHazardRows(result.hazardRows.length ? result.hazardRows.map((r) => ({ hazardText: r.hazard_text, controlText: r.control_text })) : emptyHazardRows())
           setSafetyChecks(result.safetyChecks)
+          setRiskControls(result.riskControls)
           await saveLocalFLRA(flraId, {
-            instance: { meta: loadedMeta, companyId: result.instance.company_id || null, organizationId },
+            instance: { meta: loadedMeta, companyId: result.instance.company_id || null, organizationId, acknowledgedAt: result.instance.acknowledged_at },
             hazardRows: result.hazardRows.map((r) => ({ hazardText: r.hazard_text, controlText: r.control_text })),
             safetyChecks: result.safetyChecks,
+            riskControls: result.riskControls,
             pendingSync: false,
           })
         }
@@ -103,6 +109,7 @@ export default function FLRAEditor({ flraId, organizationId, onExit }) {
             setCompanyId(local.instance.companyId || null)
             setHazardRows(local.hazardRows)
             setSafetyChecks(local.safetyChecks)
+            setRiskControls(local.riskControls || {})
             setOfflineLoaded(true)
           } else {
             setLoadError(err.message)
@@ -115,10 +122,16 @@ export default function FLRAEditor({ flraId, organizationId, onExit }) {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      saveLocalFLRA(localId, { instance: { meta, companyId, organizationId }, hazardRows, safetyChecks, pendingSync: true })
+      saveLocalFLRA(localId, {
+        instance: { meta, companyId, organizationId, acknowledgedAt },
+        hazardRows,
+        safetyChecks,
+        riskControls,
+        pendingSync: true,
+      })
     }, 600)
     return () => clearTimeout(t)
-  }, [meta, companyId, hazardRows, safetyChecks, localId])
+  }, [meta, companyId, hazardRows, safetyChecks, riskControls, localId])
 
   useEffect(() => {
     let wasOffline = !online
@@ -146,15 +159,50 @@ export default function FLRAEditor({ flraId, organizationId, onExit }) {
   }
   const addHazardRow = () => setHazardRows((rows) => [...rows, { hazardText: '', controlText: '' }])
 
-  const anyNo = Object.values(safetyChecks).some((v) => v === 'no')
+  const updateRiskControl = (fatalRisk, controlKey, controlText, patch) => {
+    setRiskControls((prev) => ({
+      ...prev,
+      [controlKey]: {
+        fatalRisk,
+        controlText,
+        status: null,
+        actionText: '',
+        responsiblePerson: '',
+        dueDate: '',
+        addressed: false,
+        ...prev[controlKey],
+        ...patch,
+      },
+    }))
+  }
+
+  const anySafetyNo = Object.values(safetyChecks).some((v) => v === 'no')
+
+  // Every control belonging to every SELECTED fatal risk must be either
+  // in_place, or not_in_place AND marked addressed, before work can proceed.
+  const allSelectedControls = meta.fatalRisks.flatMap((risk) => (FATAL_RISK_CONTROLS[risk] || []).map((c) => ({ risk, ...c })))
+  const outstandingControls = allSelectedControls.filter((c) => {
+    const rc = riskControls[c.key]
+    if (!rc || !rc.status) return true // unanswered - still outstanding
+    if (rc.status === 'not_in_place' && !rc.addressed) return true
+    return false
+  })
+  const allControlsResolved = allSelectedControls.length === 0 || outstandingControls.length === 0
 
   const handleSave = async (markFinal) => {
     setSaving(true)
     setSaveMsg('')
+
+    if (markFinal && !allControlsResolved) {
+      setSaveMsg(`Error: ${outstandingControls.length} control(s) are still outstanding. Address them before marking this FLRA final.`)
+      setSaving(false)
+      return
+    }
+
     const newMeta = markFinal ? { ...meta, status: 'final' } : meta
 
     if (!online) {
-      await saveLocalFLRA(localId, { instance: { meta: newMeta, companyId, organizationId }, hazardRows, safetyChecks, pendingSync: true })
+      await saveLocalFLRA(localId, { instance: { meta: newMeta, companyId, organizationId, acknowledgedAt }, hazardRows, safetyChecks, riskControls, pendingSync: true })
       setMeta(newMeta)
       setSaveMsg("📴 Offline — saved on this device. Will sync automatically once you're back online.")
       setSaving(false)
@@ -162,15 +210,15 @@ export default function FLRAEditor({ flraId, organizationId, onExit }) {
     }
 
     try {
-      const savedId = await saveFLRA({ flraId: id, organizationId, companyId, meta: newMeta, hazardRows, safetyChecks })
+      const savedId = await saveFLRA({ flraId: id, organizationId, companyId, meta: newMeta, hazardRows, safetyChecks, riskControls, acknowledgedAt })
       if (localId !== savedId) { await deleteLocalFLRA(localId); setLocalId(savedId) }
       setId(savedId)
       setMeta(newMeta)
-      await saveLocalFLRA(savedId, { instance: { meta: newMeta, companyId, organizationId }, hazardRows, safetyChecks, pendingSync: false })
+      await saveLocalFLRA(savedId, { instance: { meta: newMeta, companyId, organizationId, acknowledgedAt }, hazardRows, safetyChecks, riskControls, pendingSync: false })
       setSaveMsg('Saved ' + new Date().toLocaleTimeString())
       setOfflineLoaded(false)
     } catch (err) {
-      await saveLocalFLRA(localId, { instance: { meta: newMeta, companyId, organizationId }, hazardRows, safetyChecks, pendingSync: true })
+      await saveLocalFLRA(localId, { instance: { meta: newMeta, companyId, organizationId, acknowledgedAt }, hazardRows, safetyChecks, riskControls, pendingSync: true })
       const looksLikeNetworkFailure = !online || err.name === 'TypeError' || /fetch|network/i.test(err.message || '')
       setSaveMsg(
         looksLikeNetworkFailure
@@ -184,8 +232,12 @@ export default function FLRAEditor({ flraId, organizationId, onExit }) {
   const handleSign = async (role, sigData) => {
     setSignError('')
     if (!id) { setSignError('Save the FLRA at least once before signing.'); return }
+    if (!allControlsResolved) {
+      setSignError(`${outstandingControls.length} control(s) are still outstanding. Address them before signing.`)
+      return
+    }
     try {
-      const contentSnapshot = { meta, hazardRows, safetyChecks }
+      const contentSnapshot = { meta, hazardRows, safetyChecks, riskControls }
       await signFLRA(id, role, {
         signatureImage: sigData.signatureImage,
         signatoryName: sigData.signatoryName,
@@ -212,21 +264,30 @@ export default function FLRAEditor({ flraId, organizationId, onExit }) {
   }
 
   const inputCls = 'w-full px-2.5 py-2 border border-line rounded text-sm bg-[#FCFBF8]'
+  const company = companies.find((c) => c.id === companyId)
 
   return (
     <div className="p-4 md:p-9">
       <div className="flex flex-col md:flex-row justify-between md:items-start gap-3 mb-5">
-        <h1 className="font-display text-xl font-semibold text-navy">Field Level Risk Assessment</h1>
+        <div className="flex items-center gap-2.5">
+          {company?.logo_url && <img src={company.logo_url} alt="" className="h-9 object-contain" />}
+          <h1 className="font-display text-xl font-semibold text-navy">Field Level Risk Assessment</h1>
+        </div>
         <div className="flex gap-2 flex-wrap items-center">
           <button onClick={() => handleSave(false)} disabled={saving} className="bg-navy text-white px-4 py-2 rounded text-sm font-medium disabled:opacity-50">
             {saving ? 'Saving…' : 'Save FLRA'}
           </button>
-          <button onClick={() => handleSave(true)} disabled={saving} className="bg-white text-navy border-[1.5px] border-navy px-4 py-2 rounded text-sm font-medium">
+          <button
+            onClick={() => handleSave(true)}
+            disabled={saving || !allControlsResolved}
+            title={!allControlsResolved ? `${outstandingControls.length} control(s) still outstanding` : ''}
+            className="bg-white text-navy border-[1.5px] border-navy px-4 py-2 rounded text-sm font-medium disabled:opacity-40"
+          >
             Mark as Final
           </button>
           {id && (
             <button
-              onClick={async () => await generateFLRAPdf({ meta, companyId, companies, hazardRows, safetyChecks, signoffs })}
+              onClick={async () => await generateFLRAPdf({ meta, companyId, companies, hazardRows, safetyChecks, riskControls, signoffs })}
               className="bg-white text-navy border-[1.5px] border-navy px-4 py-2 rounded text-sm font-medium"
             >
               Export PDF
@@ -249,6 +310,34 @@ export default function FLRAEditor({ flraId, organizationId, onExit }) {
           {saveMsg}
         </div>
       )}
+
+      {/* Collapsible in-form reference: Instructions + Hierarchy of Controls */}
+      <details className="bg-white border border-line rounded-md mb-5" open={showInstructions} onToggle={(e) => setShowInstructions(e.target.open)}>
+        <summary className="cursor-pointer px-4 py-3 font-display font-semibold text-sm text-navy">
+          💡 FLRA Instructions & Hierarchy of Controls (reference)
+        </summary>
+        <div className="px-4 pb-4">
+          <div className="text-xs text-inksoft mb-3">{FLRA_INSTRUCTIONS.intro}</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            {[['WHY?', FLRA_INSTRUCTIONS.why], ['WHO?', FLRA_INSTRUCTIONS.who], ['WHEN?', FLRA_INSTRUCTIONS.when]].map(([label, items]) => (
+              <div key={label}>
+                <div className="bg-navy text-white text-[11px] font-display font-bold px-2 py-1 rounded-t">{label}</div>
+                <ul className="border border-t-0 border-line rounded-b p-2 text-[11px] flex flex-col gap-1">
+                  {items.map((s, i) => <li key={i}>• {s}</li>)}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-col gap-1">
+            {HIERARCHY_OF_CONTROLS.map((h, i) => (
+              <div key={h.level} className="flex items-center gap-2 py-1 px-2.5 text-white text-[11px] font-medium rounded" style={{ backgroundColor: h.color, marginLeft: i * 14, marginRight: i * 14 }}>
+                <span className="font-display font-bold">{h.level}</span>
+                <span className="opacity-90">— {h.desc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </details>
 
       {/* Header fields */}
       <div className="bg-white border border-line rounded-md p-4 md:p-5 mb-5">
@@ -336,25 +425,10 @@ export default function FLRAEditor({ flraId, organizationId, onExit }) {
               )
             })}
           </div>
-
-          {meta.fatalRisks.length > 0 && (
-            <div className="mt-3 flex flex-col gap-1.5">
-              {meta.fatalRisks.map((risk) => (
-                <details key={risk} className="text-[11.5px] border border-line rounded p-2">
-                  <summary className="text-gold cursor-pointer font-medium">
-                    💡 {risk} — critical controls to check
-                  </summary>
-                  <ul className="mt-1.5 pl-4 list-disc text-inksoft space-y-0.5">
-                    {(FATAL_RISK_CONTROLS[risk] || []).map((c, i) => <li key={i}>{c}</li>)}
-                  </ul>
-                </details>
-              ))}
-            </div>
-          )}
         </div>
 
         <div className="mt-4 bg-majorbg/40 border border-major/30 rounded p-2.5 text-[11px] text-major">
-          If a critical control is missing for any of the fatal risks identified, you have the responsibility to STOP Unsafe Work and report this to your Supervisor.
+          If a critical control is missing for any of the fatal risks identified, the task must NOT be performed until the issue is closed or addressed.
         </div>
 
         <div className="mt-4">
@@ -383,11 +457,114 @@ export default function FLRAEditor({ flraId, organizationId, onExit }) {
         <div className="text-[10.5px] text-inksoft italic mt-3">If the scope/conditions change, you must complete a new FLRA.</div>
       </div>
 
+      {/* Interactive Fatal Risk Controls Verification */}
+      {meta.fatalRisks.length > 0 && (
+        <div className="bg-white border border-line rounded-md p-4 md:p-5 mb-5">
+          <h3 className="font-display text-[15px] font-semibold text-navy mb-1">Critical Controls Verification</h3>
+          <div className="text-[11px] text-inksoft mb-4">
+            For each fatal risk selected above, confirm whether every critical control is actually in place.
+          </div>
+
+          {meta.fatalRisks.map((risk) => (
+            <div key={risk} className="mb-5 last:mb-0">
+              <div className="flex items-center gap-2 mb-2">
+                <HazardIcon templateName={risk} size={20} />
+                <div className="font-display font-semibold text-sm text-navy">{risk}</div>
+              </div>
+              <div className="border border-line rounded-md overflow-hidden">
+                {(FATAL_RISK_CONTROLS[risk] || []).map((c) => {
+                  const rc = riskControls[c.key]
+                  return (
+                    <div key={c.key} className="p-3 border-b border-line last:border-b-0">
+                      <div className="flex justify-between items-start gap-3">
+                        <div className="text-[13px] flex-1">{c.text}</div>
+                        <div className="flex gap-1.5 flex-shrink-0">
+                          <button
+                            onClick={() => updateRiskControl(risk, c.key, c.text, { status: 'in_place' })}
+                            className={`text-xs px-3 py-1.5 rounded border ${rc?.status === 'in_place' ? 'bg-conformbg border-conform text-conform' : 'border-line bg-white'}`}
+                          >
+                            In Place
+                          </button>
+                          <button
+                            onClick={() => updateRiskControl(risk, c.key, c.text, { status: 'not_in_place' })}
+                            className={`text-xs px-3 py-1.5 rounded border ${rc?.status === 'not_in_place' ? 'bg-majorbg border-major text-major' : 'border-line bg-white'}`}
+                          >
+                            Not in Place
+                          </button>
+                        </div>
+                      </div>
+
+                      {rc?.status === 'not_in_place' && (
+                        <div className="mt-3 bg-majorbg/40 border border-major/30 rounded p-3">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 mb-2.5">
+                            <div>
+                              <label className="block text-[10.5px] font-semibold text-major uppercase tracking-wide mb-1">Action</label>
+                              <input
+                                className="w-full px-2 py-1.5 border border-line rounded text-xs"
+                                value={rc.actionText}
+                                onChange={(e) => updateRiskControl(risk, c.key, c.text, { actionText: e.target.value })}
+                                placeholder="What needs to be done"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10.5px] font-semibold text-major uppercase tracking-wide mb-1">Responsible Person</label>
+                              <input
+                                className="w-full px-2 py-1.5 border border-line rounded text-xs"
+                                value={rc.responsiblePerson}
+                                onChange={(e) => updateRiskControl(risk, c.key, c.text, { responsiblePerson: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10.5px] font-semibold text-major uppercase tracking-wide mb-1">Due Date</label>
+                              <input
+                                type="date"
+                                className="w-full px-2 py-1.5 border border-line rounded text-xs"
+                                value={rc.dueDate}
+                                onChange={(e) => updateRiskControl(risk, c.key, c.text, { dueDate: e.target.value })}
+                              />
+                            </div>
+                          </div>
+                          <label className="flex items-center gap-2 text-xs font-medium text-major">
+                            <input
+                              type="checkbox"
+                              checked={!!rc.addressed}
+                              onChange={(e) => updateRiskControl(risk, c.key, c.text, { addressed: e.target.checked })}
+                            />
+                            Issue addressed — work may proceed
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Outstanding controls summary + hard block notice */}
+      {meta.fatalRisks.length > 0 && !allControlsResolved && (
+        <div className="bg-majorbg border-2 border-major rounded-md p-4 mb-5">
+          <div className="font-display font-semibold text-major text-sm mb-2">
+            ⛔ {outstandingControls.length} outstanding control{outstandingControls.length === 1 ? '' : 's'} — this task must NOT be performed
+          </div>
+          <ul className="text-xs text-major flex flex-col gap-1">
+            {outstandingControls.map((c) => (
+              <li key={c.key}>• [{c.risk}] {c.text}</li>
+            ))}
+          </ul>
+          <div className="text-[11px] text-major mt-2 italic">
+            Mark each control "In Place" or "Not in Place" and address it before this FLRA can be marked final or signed.
+          </div>
+        </div>
+      )}
+
       {/* Safety Responsibility Checks */}
       <div className="bg-white border border-line rounded-md p-4 md:p-5 mb-5">
         <h3 className="font-display text-[15px] font-semibold text-navy mb-3">My Safety Responsibility Checks</h3>
 
-        {anyNo && (
+        {anySafetyNo && (
           <div className="bg-majorbg border-2 border-major rounded p-3 mb-4 text-major text-sm font-semibold">
             ⚠ STOP! Contact your supervisor immediately. Do not continue until adequate controls have been put in place. Critical Controls must be in place before starting the job.
           </div>
@@ -422,6 +599,11 @@ export default function FLRAEditor({ flraId, organizationId, onExit }) {
         <h3 className="font-display text-[15px] font-semibold text-navy mb-3">Sign-off</h3>
         {signError && <div className="text-xs text-major bg-majorbg border border-major rounded p-2 mb-3">{signError}</div>}
         {!id && <div className="text-xs text-minor bg-minorbg border border-minor rounded p-2 mb-3">Save the FLRA at least once before signing.</div>}
+        {!allControlsResolved && (
+          <div className="text-xs text-major bg-majorbg border border-major rounded p-2 mb-3">
+            Signing is locked until all outstanding critical controls above are addressed.
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {['employee', 'supervisor'].map((role) => (
@@ -438,18 +620,24 @@ export default function FLRAEditor({ flraId, organizationId, onExit }) {
                   </div>
                 </div>
               ) : signingRole === role ? (
-                <SignaturePad
-                  signatoryName={role === 'employee' ? meta.employeeName : ''}
-                  savedSignature={savedSignature}
-                  onSaveForReuse={(img, name) => { saveSignatureForReuse(img, name); setSavedSignature({ signature_image: img, full_name: name }) }}
-                  onSign={(sigData) => handleSign(role, sigData)}
-                />
+                allControlsResolved ? (
+                  <SignaturePad
+                    signatoryName={role === 'employee' ? meta.employeeName : ''}
+                    savedSignature={savedSignature}
+                    onSaveForReuse={(img, name) => { saveSignatureForReuse(img, name); setSavedSignature({ signature_image: img, full_name: name }) }}
+                    onSign={(sigData) => handleSign(role, sigData)}
+                  />
+                ) : (
+                  <div className="text-xs text-major p-3 border border-major rounded">Resolve all outstanding controls first.</div>
+                )
               ) : (
                 <div
-                  onClick={() => setSigningRole(role)}
-                  className="border-[1.5px] border-dashed border-line rounded-md h-[90px] flex items-center justify-center cursor-pointer bg-[#FCFBF8] text-inksoft text-xs italic font-display"
+                  onClick={() => allControlsResolved && setSigningRole(role)}
+                  className={`border-[1.5px] border-dashed rounded-md h-[90px] flex items-center justify-center text-xs italic font-display ${
+                    allControlsResolved ? 'border-line cursor-pointer bg-[#FCFBF8] text-inksoft' : 'border-major/40 bg-majorbg/30 text-major cursor-not-allowed'
+                  }`}
                 >
-                  Click to sign
+                  {allControlsResolved ? 'Click to sign' : 'Locked — resolve controls first'}
                 </div>
               )}
             </div>

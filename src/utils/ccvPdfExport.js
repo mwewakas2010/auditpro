@@ -201,7 +201,8 @@ export async function generateCCVPdf({ template, categories, meta, responses, co
     body: [
       ['Assessors', meta.assessors || '—', 'Date, Time', meta.dateTime ? new Date(meta.dateTime).toLocaleString() : '—'],
       ['Location', meta.location || '—', 'Department', meta.department || '—'],
-      ['Section', meta.section || '—', '', ''],
+      ['Section', meta.section || '—', 'Task', meta.task || '—'],
+      ['Site', meta.site || '—', 'Unplanned Work', meta.isUnplanned ? 'Yes' : 'No'],
     ],
   })
   y = doc.lastAutoTable.finalY + 8

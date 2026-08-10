@@ -10,7 +10,7 @@ import SignaturePad from './SignaturePad.jsx'
 import HazardIcon from './HazardIcon.jsx'
 
 function emptyMeta() {
-  return { assessors: '', dateTime: '', location: '', department: '', section: '', status: 'in_progress' }
+  return { assessors: '', dateTime: '', location: '', department: '', section: '', task: '', site: '', isUnplanned: false, status: 'in_progress' }
 }
 
 export default function CCVEditor({ ccvId, templateId, onExit }) {
@@ -75,6 +75,9 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
             location: result.instance.location || '',
             department: result.instance.department || '',
             section: result.instance.section || '',
+            task: result.instance.task || '',
+            site: result.instance.site || '',
+            isUnplanned: !!result.instance.is_unplanned,
             status: result.instance.status || 'in_progress',
           }
           setMeta(loadedMeta)
@@ -356,16 +359,34 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
           <label className="block text-[11px] font-semibold text-navy2 mb-1.5 uppercase tracking-wide">Section</label>
           <input className={inputCls} value={meta.section} onChange={(e) => setMeta({ ...meta, section: e.target.value })} />
         </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-navy2 mb-1.5 uppercase tracking-wide">Task</label>
+          <input className={inputCls} value={meta.task} onChange={(e) => setMeta({ ...meta, task: e.target.value })} />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-navy2 mb-1.5 uppercase tracking-wide">Site</label>
+          <input className={inputCls} value={meta.site} onChange={(e) => setMeta({ ...meta, site: e.target.value })} />
+        </div>
+        <div className="flex items-end pb-1">
+          <label className="flex items-center gap-2 text-xs font-medium text-navy2">
+            <input
+              type="checkbox"
+              checked={meta.isUnplanned}
+              onChange={(e) => setMeta({ ...meta, isUnplanned: e.target.checked })}
+            />
+            Unplanned work (e.g. breakdown/unscheduled)
+          </label>
+        </div>
       </div>
 
       {categories.map((cat) => {
         const score = categoryScore(cat)
         return (
-          <div key={cat.id} className="bg-white border border-line rounded-md mb-4 overflow-hidden">
-            <div className="bg-navy text-white px-4 py-2.5 flex justify-between items-center">
+          <details key={cat.id} className="bg-white border border-line rounded-md mb-4 overflow-hidden">
+            <summary className="bg-navy text-white px-4 py-2.5 flex justify-between items-center cursor-pointer list-none">
               <div className="font-display font-semibold text-sm">{cat.category_number} {cat.name}</div>
               <div className="font-mono text-xs text-gold">{score.yes} / {score.total}</div>
-            </div>
+            </summary>
             <div className="divide-y divide-line">
               {cat.checklist_template_items.map((item) => {
                 const r = responses[item.id] || { compliance: null, thumbs: [] }
@@ -457,7 +478,7 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
                 )
               })}
             </div>
-          </div>
+          </details>
         )
       })}
 

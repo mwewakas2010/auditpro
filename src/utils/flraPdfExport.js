@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { SAFETY_CHECK_ITEMS } from '../data/flraContent'
+import { SAFETY_CHECK_ITEMS, FATAL_RISK_CONTROLS } from '../data/flraContent'
 
 const NAVY = [22, 37, 61]
 const INK = [34, 38, 43]
@@ -62,7 +62,7 @@ function footer(doc) {
   }
 }
 
-export async function generateFLRAPdf({ meta, companyId, companies, hazardRows, safetyChecks, signoffs }) {
+export async function generateFLRAPdf({ meta, companyId, companies, hazardRows, safetyChecks, riskControls, signoffs }) {
   const company = companies?.find((c) => c.id === companyId)
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
 
@@ -143,6 +143,91 @@ export async function generateFLRAPdf({ meta, companyId, companies, hazardRows, 
   doc.setTextColor(...INK_SOFT)
   doc.text((meta.fatalRisks || []).join(', ') || 'None selected', MARGIN, y)
   y += 8
+
+  // ================= CRITICAL CONTROLS VERIFICATION =================
+  if ((meta.fatalRisks || []).length > 0) {
+    if (y > PAGE_H - 60) { doc.addPage(); y = 20 }
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(11)
+    doc.setTextColor(...NAVY)
+    doc.text('Critical Controls Verification', MARGIN, y)
+    y += 6
+
+    const controlRows = []
+    const outstanding = []
+    meta.fatalRisks.forEach((risk) => {
+      const controls = FATAL_RISK_CONTROLS[risk] || []
+      controls.forEach((c) => {
+        const rc = riskControls?.[c.key]
+        const status = rc?.status === 'in_place' ? 'In Place' : rc?.status === 'not_in_place' ? 'Not in Place' : 'Not Assessed'
+        controlRows.push([risk, c.text, status, rc?.status])
+        if (rc?.status === 'not_in_place') {
+          outstanding.push({
+            risk,
+            text: c.text,
+            action: rc.actionText || '(no action noted)',
+            responsible: rc.responsiblePerson || '—',
+            dueDate: rc.dueDate || '—',
+            addressed: !!rc.addressed,
+          })
+        }
+      })
+    })
+
+    if (y + 15 > PAGE_H - 20) { doc.addPage(); y = 20 }
+    autoTable(doc, {
+      startY: y,
+      theme: 'grid',
+      margin: { left: MARGIN, right: MARGIN },
+      styles: { fontSize: 8, cellPadding: 2, valign: 'top', overflow: 'linebreak' },
+      headStyles: { fillColor: NAVY, textColor: 255, fontStyle: 'bold' },
+      columnStyles: { 0: { cellWidth: 32 }, 1: { cellWidth: CONTENT_W - 32 - 26 }, 2: { cellWidth: 26, halign: 'center' } },
+      head: [['Fatal Risk', 'Control', 'Status']],
+      body: controlRows.map((r) => r.slice(0, 3)),
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index === 2) {
+          const status = controlRows[data.row.index][3]
+          if (status === 'in_place') { data.cell.styles.fillColor = CONFORM; data.cell.styles.textColor = CONFORM_TXT; data.cell.styles.fontStyle = 'bold' }
+          if (status === 'not_in_place') { data.cell.styles.fillColor = MAJOR; data.cell.styles.textColor = MAJOR_TXT; data.cell.styles.fontStyle = 'bold' }
+        }
+      },
+    })
+    y = doc.lastAutoTable.finalY + 6
+
+    // Outstanding controls list
+    if (outstanding.length) {
+      if (y > PAGE_H - 50) { doc.addPage(); y = 20 }
+      const unresolvedCount = outstanding.filter((o) => !o.addressed).length
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9.5)
+      doc.setTextColor(...(unresolvedCount > 0 ? MAJOR_TXT : INK))
+      doc.text(
+        unresolvedCount > 0
+          ? `⛔ ${unresolvedCount} outstanding control(s) — task must NOT be performed until addressed`
+          : 'Absent controls identified — all have been addressed',
+        MARGIN, y
+      )
+      y += 5
+
+      autoTable(doc, {
+        startY: y,
+        theme: 'grid',
+        margin: { left: MARGIN, right: MARGIN },
+        styles: { fontSize: 8, cellPadding: 2, valign: 'top' },
+        headStyles: { fillColor: NAVY, textColor: 255, fontStyle: 'bold' },
+        columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 60 }, 2: { cellWidth: 35 }, 3: { cellWidth: 22 }, 4: { cellWidth: 18, halign: 'center' } },
+        head: [['Control', 'Action', 'Responsible Person', 'Due Date', 'Addressed']],
+        body: outstanding.map((o) => [`[${o.risk}] ${o.text}`, o.action, o.responsible, o.dueDate, o.addressed ? 'Yes' : 'No']),
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === 4) {
+            if (data.cell.raw === 'No') { data.cell.styles.fillColor = MAJOR; data.cell.styles.textColor = MAJOR_TXT; data.cell.styles.fontStyle = 'bold' }
+            if (data.cell.raw === 'Yes') { data.cell.styles.fillColor = CONFORM; data.cell.styles.textColor = CONFORM_TXT; data.cell.styles.fontStyle = 'bold' }
+          }
+        },
+      })
+      y = doc.lastAutoTable.finalY + 8
+    }
+  }
 
   // Hazard / Control table
   const rows = (hazardRows || []).filter((r) => r.hazardText || r.controlText)

@@ -5,8 +5,10 @@ import { AUDIT_TABS } from './AuditEditor.jsx'
 import AuditList from './AuditList.jsx'
 import AuditEditor from './AuditEditor.jsx'
 import FLRAList from './FLRAList.jsx'
+import FLRALanding from './FLRALanding.jsx'
 import FLRAEditor from './FLRAEditor.jsx'
 import Billing from './Billing.jsx'
+import InviteTeamMember from './InviteTeamMember.jsx'
 import {
   ClipboardList,
   ClipboardCheck,
@@ -40,6 +42,8 @@ export default function SubscriberShell({ organization }) {
 
   const [flraId, setFlraId] = useState(null)
   const [flraEditorKey, setFlraEditorKey] = useState(0)
+  const [pendingFlraCompanyId, setPendingFlraCompanyId] = useState(null)
+  const [pendingFlraAcknowledgedAt, setPendingFlraAcknowledgedAt] = useState(null)
 
   const accessState = getAccessState(organization)
   const effectiveSection = accessState.access === 'restricted' ? 'billing' : section
@@ -63,7 +67,7 @@ export default function SubscriberShell({ organization }) {
     setFlraEditorKey((k) => k + 1)
     setSection('flra-editor')
   }
-  const newFLRA = () => openFLRA(null)
+  const newFLRA = () => setSection('flra-landing')
 
   return (
     <div className="flex flex-col md:flex-row h-screen overflow-hidden">
@@ -76,7 +80,7 @@ export default function SubscriberShell({ organization }) {
             </button>
             <div className="text-xs font-mono text-[#9FB0C9]">{AUDIT_TAB_MOBILE[auditTab]?.label}</div>
           </>
-        ) : effectiveSection === 'flra-editor' ? (
+        ) : effectiveSection === 'flra-editor' || effectiveSection === 'flra-landing' ? (
           <>
             <button onClick={() => goToSection('flras')} className="flex items-center gap-1.5 text-sm">
               <ArrowLeft size={18} /> FLRAs
@@ -123,7 +127,7 @@ export default function SubscriberShell({ organization }) {
               key={item.key}
               onClick={() => goToSection(item.key)}
               className={`px-[22px] py-[13px] text-sm cursor-pointer border-l-[3px] transition-colors flex items-center gap-2 ${
-                effectiveSection === item.key || (item.key === 'flras' && effectiveSection === 'flra-editor')
+                effectiveSection === item.key || (item.key === 'flras' && (effectiveSection === 'flra-editor' || effectiveSection === 'flra-landing'))
                   ? 'bg-white/10 border-gold text-white'
                   : 'border-transparent text-[#C7CEDA] hover:bg-white/5'
               }`}
@@ -159,6 +163,7 @@ export default function SubscriberShell({ organization }) {
         <div className="flex-1" />
 
         <div className="px-[22px] py-4 border-t border-white/10">
+          {organization.role === 'admin' && <InviteTeamMember organizationId={organization.id} />}
           <button
             onClick={() => supabase.auth.signOut()}
             className="text-[12px] text-[#C7CEDA] hover:text-white mb-2 block"
@@ -186,8 +191,27 @@ export default function SubscriberShell({ organization }) {
             reportBrandName={organization.name}
           />
         )}
+        {effectiveSection === 'flra-landing' && (
+          <FLRALanding
+            onAcknowledge={({ companyId }) => {
+              setPendingFlraCompanyId(companyId)
+              setPendingFlraAcknowledgedAt(new Date().toISOString())
+              setFlraId(null)
+              setFlraEditorKey((k) => k + 1)
+              setSection('flra-editor')
+            }}
+            onCancel={() => goToSection('flras')}
+          />
+        )}
         {effectiveSection === 'flra-editor' && (
-          <FLRAEditor key={flraEditorKey} flraId={flraId} organizationId={organization.id} onExit={() => goToSection('flras')} />
+          <FLRAEditor
+            key={flraEditorKey}
+            flraId={flraId}
+            organizationId={organization.id}
+            initialCompanyId={pendingFlraCompanyId}
+            initialAcknowledgedAt={pendingFlraAcknowledgedAt}
+            onExit={() => goToSection('flras')}
+          />
         )}
       </div>
 
@@ -213,7 +237,7 @@ export default function SubscriberShell({ organization }) {
             })
           : APP_NAV.map((item) => {
               const Icon = item.icon
-              const active = effectiveSection === item.key || (item.key === 'flras' && effectiveSection === 'flra-editor')
+              const active = effectiveSection === item.key || (item.key === 'flras' && (effectiveSection === 'flra-editor' || effectiveSection === 'flra-landing'))
               return (
                 <button
                   key={item.key}

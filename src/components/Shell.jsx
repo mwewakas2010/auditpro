@@ -8,6 +8,7 @@ import AuditEditor from './AuditEditor.jsx'
 import CCVList from './CCVList.jsx'
 import CCVEditor from './CCVEditor.jsx'
 import FLRAList from './FLRAList.jsx'
+import FLRALanding from './FLRALanding.jsx'
 import FLRAEditor from './FLRAEditor.jsx'
 import {
   LayoutDashboard,
@@ -50,6 +51,8 @@ export default function Shell() {
 
   const [flraId, setFlraId] = useState(null)
   const [flraEditorKey, setFlraEditorKey] = useState(0)
+  const [pendingFlraCompanyId, setPendingFlraCompanyId] = useState(null)
+  const [pendingFlraAcknowledgedAt, setPendingFlraAcknowledgedAt] = useState(null)
 
   const goToSection = (key) => {
     setSection(key)
@@ -84,7 +87,7 @@ export default function Shell() {
     setFlraEditorKey((k) => k + 1)
     setSection('flra-editor')
   }
-  const newFLRA = () => openFLRA(null)
+  const newFLRA = () => setSection('flra-landing')
 
   return (
     <div className="flex flex-col md:flex-row h-screen overflow-hidden">
@@ -104,7 +107,7 @@ export default function Shell() {
             </button>
             <div className="text-xs font-mono text-[#9FB0C9]">CCV</div>
           </>
-        ) : section === 'flra-editor' ? (
+        ) : section === 'flra-editor' || section === 'flra-landing' ? (
           <>
             <button onClick={() => goToSection('flras')} className="flex items-center gap-1.5 text-sm">
               <ArrowLeft size={18} /> FLRAs
@@ -138,7 +141,7 @@ export default function Shell() {
               className={`px-[22px] py-[13px] text-sm cursor-pointer border-l-[3px] flex items-center gap-2 transition-colors ${
                 section === item.key ||
                 (item.key === 'ccvs' && section === 'ccv-editor') ||
-                (item.key === 'flras' && section === 'flra-editor')
+                (item.key === 'flras' && (section === 'flra-editor' || section === 'flra-landing'))
                   ? 'bg-white/10 border-gold text-white'
                   : 'border-transparent text-[#C7CEDA] hover:bg-white/5'
               }`}
@@ -203,8 +206,27 @@ export default function Shell() {
         {section === 'ccv-editor' && (
           <CCVEditor key={ccvEditorKey} ccvId={ccvId} templateId={ccvTemplateId} onExit={() => goToSection('ccvs')} />
         )}
+        {section === 'flra-landing' && (
+          <FLRALanding
+            onAcknowledge={({ companyId }) => {
+              setPendingFlraCompanyId(companyId)
+              setPendingFlraAcknowledgedAt(new Date().toISOString())
+              setFlraId(null)
+              setFlraEditorKey((k) => k + 1)
+              setSection('flra-editor')
+            }}
+            onCancel={() => goToSection('flras')}
+          />
+        )}
         {section === 'flra-editor' && (
-          <FLRAEditor key={flraEditorKey} flraId={flraId} organizationId={null} onExit={() => goToSection('flras')} />
+          <FLRAEditor
+            key={flraEditorKey}
+            flraId={flraId}
+            organizationId={null}
+            initialCompanyId={pendingFlraCompanyId}
+            initialAcknowledgedAt={pendingFlraAcknowledgedAt}
+            onExit={() => goToSection('flras')}
+          />
         )}
       </div>
 
@@ -233,7 +255,7 @@ export default function Shell() {
               const active =
                 section === item.key ||
                 (item.key === 'ccvs' && section === 'ccv-editor') ||
-                (item.key === 'flras' && section === 'flra-editor')
+                (item.key === 'flras' && (section === 'flra-editor' || section === 'flra-landing'))
               return (
                 <button
                   key={item.key}

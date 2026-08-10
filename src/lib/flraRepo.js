@@ -37,15 +37,30 @@ export async function loadFLRA(id) {
   const safetyChecks = {}
   safetyRows.forEach((r) => { safetyChecks[r.item_key] = r.response })
 
+  const { data: riskControlRows, error: rcErr } = await supabase.from('flra_risk_controls').select('*').eq('flra_id', id)
+  if (rcErr) throw rcErr
+  const riskControls = {}
+  riskControlRows.forEach((r) => {
+    riskControls[r.control_key] = {
+      fatalRisk: r.fatal_risk,
+      controlText: r.control_text,
+      status: r.status,
+      actionText: r.action_text || '',
+      responsiblePerson: r.responsible_person || '',
+      dueDate: r.due_date || '',
+      addressed: r.addressed,
+    }
+  })
+
   const { data: signoffRows, error: soErr } = await supabase.from('flra_signoffs').select('*').eq('flra_id', id)
   if (soErr) throw soErr
   const signoffs = {}
   signoffRows.forEach((r) => { signoffs[r.role] = r })
 
-  return { instance, company, hazardRows, safetyChecks, signoffs }
+  return { instance, company, hazardRows, safetyChecks, riskControls, signoffs }
 }
 
-export async function saveFLRA({ flraId, organizationId, companyId, meta, hazardRows, safetyChecks }) {
+export async function saveFLRA({ flraId, organizationId, companyId, meta, hazardRows, safetyChecks, riskControls, acknowledgedAt }) {
   const { data: userData } = await supabase.auth.getUser()
   const owner = userData?.user?.id
 
@@ -63,6 +78,10 @@ export async function saveFLRA({ flraId, organizationId, companyId, meta, hazard
     crew_members: meta.crewMembers || null,
     status: meta.status || 'in_progress',
     updated_at: new Date().toISOString(),
+  }
+  if (acknowledgedAt) {
+    instancePayload.acknowledged_at = acknowledgedAt
+    instancePayload.acknowledged_by = owner
   }
 
   let id = flraId
@@ -94,6 +113,27 @@ export async function saveFLRA({ flraId, organizationId, companyId, meta, hazard
     if (error) throw error
   }
 
+  // Risk controls: upsert every control that has been given a status
+  for (const [controlKey, rc] of Object.entries(riskControls || {})) {
+    if (!rc || !rc.status) continue
+    const { error } = await supabase.from('flra_risk_controls').upsert(
+      {
+        flra_id: id,
+        fatal_risk: rc.fatalRisk,
+        control_key: controlKey,
+        control_text: rc.controlText,
+        status: rc.status,
+        action_text: rc.status === 'not_in_place' ? rc.actionText || null : null,
+        responsible_person: rc.status === 'not_in_place' ? rc.responsiblePerson || null : null,
+        due_date: rc.status === 'not_in_place' && rc.dueDate ? rc.dueDate : null,
+        addressed: rc.status === 'not_in_place' ? !!rc.addressed : false,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'flra_id,control_key' }
+    )
+    if (error) throw error
+  }
+
   return id
 }
 
@@ -113,6 +153,8 @@ export async function syncPendingFLRAs() {
         meta: entry.instance.meta,
         hazardRows: entry.hazardRows,
         safetyChecks: entry.safetyChecks,
+        riskControls: entry.riskControls,
+        acknowledgedAt: entry.instance.acknowledgedAt,
       })
       await deleteLocalFLRA(entry.localId)
       synced.push({ localId: entry.localId, realId })
