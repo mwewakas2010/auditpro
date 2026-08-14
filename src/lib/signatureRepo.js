@@ -118,3 +118,81 @@ export async function loadFLRASignoffs(flraId) {
   data.forEach((r) => { result[r.role] = r })
   return result
 }
+
+// JSA: team members can have any number of signatures - always insert a
+// new row rather than upsert on a fixed role.
+export async function signJSATeamMember(jsaId, { signatureImage, signatoryName, employeeIdNo, consentAccepted, userAgent, contentSnapshot }) {
+  const { data: userData } = await supabase.auth.getUser()
+  const contentHash = await hashContent(contentSnapshot)
+  const { error } = await supabase.from('jsa_signoffs').insert({
+    jsa_id: jsaId,
+    role: 'team_member',
+    signatory_name: signatoryName,
+    employee_id_no: employeeIdNo || null,
+    signature_image: signatureImage,
+    consent_accepted: consentAccepted,
+    user_agent: userAgent,
+    content_hash: contentHash,
+    signed_by_user_id: userData?.user?.id,
+    signed_at: new Date().toISOString(),
+  })
+  if (error) throw error
+}
+
+// JSA: each supervisor role (senior_supervisor / work_group_supervisor)
+// is expected once - manual update-or-insert since there's no DB unique
+// constraint enforcing that (kept flexible on purpose).
+export async function signJSASupervisor(jsaId, role, { signatureImage, signatoryName, employeeIdNo, consentAccepted, userAgent, contentSnapshot }) {
+  const { data: userData } = await supabase.auth.getUser()
+  const contentHash = await hashContent(contentSnapshot)
+  const { data: existing } = await supabase.from('jsa_signoffs').select('id').eq('jsa_id', jsaId).eq('role', role).maybeSingle()
+  const payload = {
+    signatory_name: signatoryName,
+    employee_id_no: employeeIdNo || null,
+    signature_image: signatureImage,
+    consent_accepted: consentAccepted,
+    user_agent: userAgent,
+    content_hash: contentHash,
+    signed_by_user_id: userData?.user?.id,
+    signed_at: new Date().toISOString(),
+  }
+  if (existing) {
+    const { error } = await supabase.from('jsa_signoffs').update(payload).eq('id', existing.id)
+    if (error) throw error
+  } else {
+    const { error } = await supabase.from('jsa_signoffs').insert({ jsa_id: jsaId, role, ...payload })
+    if (error) throw error
+  }
+}
+
+export async function loadJSASignoffs(jsaId) {
+  const { data, error } = await supabase.from('jsa_signoffs').select('*').eq('jsa_id', jsaId).order('signed_at')
+  if (error) throw error
+  return data
+}
+
+// Daily re-review signatures (multi-shift JSAs, up to 14 days) - always a
+// new row per person per day.
+export async function signJSADailyReview(jsaId, reviewDate, { signatureImage, signatoryName, employeeIdNo, consentAccepted, userAgent, contentSnapshot }) {
+  const { data: userData } = await supabase.auth.getUser()
+  const contentHash = await hashContent(contentSnapshot)
+  const { error } = await supabase.from('jsa_daily_reviews').insert({
+    jsa_id: jsaId,
+    review_date: reviewDate,
+    signatory_name: signatoryName,
+    employee_id_no: employeeIdNo || null,
+    signature_image: signatureImage,
+    consent_accepted: consentAccepted,
+    user_agent: userAgent,
+    content_hash: contentHash,
+    signed_by_user_id: userData?.user?.id,
+    signed_at: new Date().toISOString(),
+  })
+  if (error) throw error
+}
+
+export async function loadJSADailyReviews(jsaId) {
+  const { data, error } = await supabase.from('jsa_daily_reviews').select('*').eq('jsa_id', jsaId).order('review_date')
+  if (error) throw error
+  return data
+}

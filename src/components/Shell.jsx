@@ -10,12 +10,15 @@ import CCVEditor from './CCVEditor.jsx'
 import FLRAList from './FLRAList.jsx'
 import FLRALanding from './FLRALanding.jsx'
 import FLRAEditor from './FLRAEditor.jsx'
+import JSAList from './JSAList.jsx'
+import JSAEditor from './JSAEditor.jsx'
 import {
   LayoutDashboard,
   ClipboardList,
   Building2,
   ShieldCheck,
   ClipboardCheck,
+  FileSpreadsheet,
   FileText,
   ListChecks,
   Search,
@@ -29,6 +32,7 @@ const APP_NAV = [
   { key: 'audits', label: 'My Audits', icon: ClipboardList },
   { key: 'ccvs', label: 'Critical Controls', icon: ShieldCheck },
   { key: 'flras', label: 'FLRAs', icon: ClipboardCheck },
+  { key: 'jsas', label: 'JSAs', icon: FileSpreadsheet },
   { key: 'companies', label: 'Manage Companies', icon: Building2 },
 ]
 
@@ -54,11 +58,15 @@ export default function Shell() {
   const [pendingFlraCompanyId, setPendingFlraCompanyId] = useState(null)
   const [pendingFlraAcknowledgedAt, setPendingFlraAcknowledgedAt] = useState(null)
 
+  const [jsaId, setJsaId] = useState(null)
+  const [jsaEditorKey, setJsaEditorKey] = useState(0)
+
   const goToSection = (key) => {
     setSection(key)
     setAuditId(null)
     setCcvId(null)
     setFlraId(null)
+    setJsaId(null)
   }
 
   const openAudit = (id) => {
@@ -89,6 +97,13 @@ export default function Shell() {
   }
   const newFLRA = () => setSection('flra-landing')
 
+  const openJSA = (id) => {
+    setJsaId(id)
+    setJsaEditorKey((k) => k + 1)
+    setSection('jsa-editor')
+  }
+  const newJSA = () => openJSA(null)
+
   return (
     <div className="flex flex-col md:flex-row h-screen overflow-hidden">
       {/* ===== Mobile top bar ===== */}
@@ -113,6 +128,13 @@ export default function Shell() {
               <ArrowLeft size={18} /> FLRAs
             </button>
             <div className="text-xs font-mono text-[#9FB0C9]">FLRA</div>
+          </>
+        ) : section === 'jsa-editor' ? (
+          <>
+            <button onClick={() => goToSection('jsas')} className="flex items-center gap-1.5 text-sm">
+              <ArrowLeft size={18} /> JSAs
+            </button>
+            <div className="text-xs font-mono text-[#9FB0C9]">JSA</div>
           </>
         ) : (
           <>
@@ -141,7 +163,8 @@ export default function Shell() {
               className={`px-[22px] py-[13px] text-sm cursor-pointer border-l-[3px] flex items-center gap-2 transition-colors ${
                 section === item.key ||
                 (item.key === 'ccvs' && section === 'ccv-editor') ||
-                (item.key === 'flras' && (section === 'flra-editor' || section === 'flra-landing'))
+                (item.key === 'flras' && (section === 'flra-editor' || section === 'flra-landing')) ||
+                (item.key === 'jsas' && section === 'jsa-editor')
                   ? 'bg-white/10 border-gold text-white'
                   : 'border-transparent text-[#C7CEDA] hover:bg-white/5'
               }`}
@@ -193,6 +216,7 @@ export default function Shell() {
         {section === 'audits' && <AuditList onOpen={openAudit} onNew={newAudit} />}
         {section === 'ccvs' && <CCVList onOpen={openCCV} onNew={newCCV} />}
         {section === 'flras' && <FLRAList onOpen={openFLRA} onNew={newFLRA} />}
+        {section === 'jsas' && <JSAList onOpen={openJSA} onNew={newJSA} />}
         {section === 'companies' && <Companies />}
         {section === 'editor' && (
           <AuditEditor
@@ -228,6 +252,9 @@ export default function Shell() {
             onExit={() => goToSection('flras')}
           />
         )}
+        {section === 'jsa-editor' && (
+          <JSAEditor key={jsaEditorKey} jsaId={jsaId} organizationId={null} onExit={() => goToSection('jsas')} />
+        )}
       </div>
 
       {/* ===== Mobile bottom tab bar ===== */}
@@ -255,7 +282,8 @@ export default function Shell() {
               const active =
                 section === item.key ||
                 (item.key === 'ccvs' && section === 'ccv-editor') ||
-                (item.key === 'flras' && (section === 'flra-editor' || section === 'flra-landing'))
+                (item.key === 'flras' && (section === 'flra-editor' || section === 'flra-landing')) ||
+                (item.key === 'jsas' && section === 'jsa-editor')
               return (
                 <button
                   key={item.key}

@@ -1,10 +1,11 @@
 import { openDB } from 'idb'
 
 const DB_NAME = 'auditpro-offline'
-const DB_VERSION = 3
+const DB_VERSION = 4
 const AUDITS_STORE = 'audits'
 const CCVS_STORE = 'ccvs'
 const FLRAS_STORE = 'flras'
+const JSAS_STORE = 'jsas'
 const COMPANIES_CACHE_KEY = 'companies-cache'
 
 let dbPromise = null
@@ -20,6 +21,9 @@ function getDB() {
         }
         if (!db.objectStoreNames.contains(FLRAS_STORE)) {
           db.createObjectStore(FLRAS_STORE, { keyPath: 'localId' })
+        }
+        if (!db.objectStoreNames.contains(JSAS_STORE)) {
+          db.createObjectStore(JSAS_STORE, { keyPath: 'localId' })
         }
       },
     })
@@ -92,13 +96,14 @@ export async function listPendingCCVs() {
 
 // ---- FLRAs ----
 
-export async function saveLocalFLRA(localId, { instance, hazardRows, safetyChecks, pendingSync }) {
+export async function saveLocalFLRA(localId, { instance, hazardRows, safetyChecks, riskControls, pendingSync }) {
   const db = await getDB()
   await db.put(FLRAS_STORE, {
     localId,
     instance,
     hazardRows,
     safetyChecks,
+    riskControls,
     pendingSync: !!pendingSync,
     savedAt: new Date().toISOString(),
   })
@@ -122,6 +127,35 @@ export async function listPendingFLRAs() {
 
 // Simple localStorage cache of the companies list, so the Setup screen's
 // company dropdown still has something to show when opened with no signal.
+// ---- JSAs ----
+
+export async function saveLocalJSA(localId, { instance, steps, pendingSync }) {
+  const db = await getDB()
+  await db.put(JSAS_STORE, {
+    localId,
+    instance,
+    steps,
+    pendingSync: !!pendingSync,
+    savedAt: new Date().toISOString(),
+  })
+}
+
+export async function getLocalJSA(localId) {
+  const db = await getDB()
+  return db.get(JSAS_STORE, localId)
+}
+
+export async function deleteLocalJSA(localId) {
+  const db = await getDB()
+  await db.delete(JSAS_STORE, localId)
+}
+
+export async function listPendingJSAs() {
+  const db = await getDB()
+  const all = await db.getAll(JSAS_STORE)
+  return all.filter((j) => j.pendingSync)
+}
+
 export function cacheCompaniesList(companies) {
   try {
     localStorage.setItem(COMPANIES_CACHE_KEY, JSON.stringify(companies))
