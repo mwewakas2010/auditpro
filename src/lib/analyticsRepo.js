@@ -12,6 +12,12 @@ export async function getJSARiskAnalytics(scopeMode = 'own', orgId = null, dateF
   return data?.[0] || null
 }
 
+export async function getJSARiskTransition(scopeMode = 'own', orgId = null, dateFrom = null, dateTo = null) {
+  const { data, error } = await supabase.rpc('analytics_jsa_risk_transition', { scope_mode: scopeMode, target_org_id: orgId, date_from: dateFrom, date_to: dateTo })
+  if (error) throw error
+  return data
+}
+
 export async function getOutstandingFLRAControls(scopeMode = 'own', orgId = null) {
   const { data, error } = await supabase.rpc('analytics_outstanding_flra_controls', { scope_mode: scopeMode, target_org_id: orgId })
   if (error) throw error
@@ -54,8 +60,8 @@ export async function getControlHierarchyUsage(scopeMode = 'own', orgId = null) 
   return data
 }
 
-export async function getTimeToClose(scopeMode = 'own', orgId = null) {
-  const { data, error } = await supabase.rpc('analytics_time_to_close', { scope_mode: scopeMode, target_org_id: orgId })
+export async function getTimeToClose(scopeMode = 'own', orgId = null, dateFrom = null, dateTo = null) {
+  const { data, error } = await supabase.rpc('analytics_time_to_close', { scope_mode: scopeMode, target_org_id: orgId, date_from: dateFrom, date_to: dateTo })
   if (error) throw error
   return data?.[0] || null
 }
@@ -66,14 +72,14 @@ export async function getObservationTrend(scopeMode = 'own', orgId = null, weeks
   return data
 }
 
-export async function getDailyReviewCompletion(scopeMode = 'own', orgId = null) {
-  const { data, error } = await supabase.rpc('analytics_daily_review_completion', { scope_mode: scopeMode, target_org_id: orgId })
+export async function getDailyReviewCompletion(scopeMode = 'own', orgId = null, dateFrom = null, dateTo = null) {
+  const { data, error } = await supabase.rpc('analytics_daily_review_completion', { scope_mode: scopeMode, target_org_id: orgId, date_from: dateFrom, date_to: dateTo })
   if (error) throw error
   return data?.[0] || null
 }
 
-export async function getHazardClosureRate(scopeMode = 'own', orgId = null) {
-  const { data, error } = await supabase.rpc('analytics_hazard_closure_rate', { scope_mode: scopeMode, target_org_id: orgId })
+export async function getHazardClosureRate(scopeMode = 'own', orgId = null, dateFrom = null, dateTo = null) {
+  const { data, error } = await supabase.rpc('analytics_hazard_closure_rate', { scope_mode: scopeMode, target_org_id: orgId, date_from: dateFrom, date_to: dateTo })
   if (error) throw error
   return data
 }
