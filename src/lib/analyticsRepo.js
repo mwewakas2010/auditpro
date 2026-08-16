@@ -72,6 +72,12 @@ export async function getObservationTrend(scopeMode = 'own', orgId = null, weeks
   return data
 }
 
+export async function getDailyObservationTrend(scopeMode = 'own', orgId = null, daysBack = 30, dateFrom = null, dateTo = null) {
+  const { data, error } = await supabase.rpc('analytics_daily_observation_trend', { scope_mode: scopeMode, target_org_id: orgId, days_back: daysBack, date_from: dateFrom, date_to: dateTo })
+  if (error) throw error
+  return data
+}
+
 export async function getDailyReviewCompletion(scopeMode = 'own', orgId = null, dateFrom = null, dateTo = null) {
   const { data, error } = await supabase.rpc('analytics_daily_review_completion', { scope_mode: scopeMode, target_org_id: orgId, date_from: dateFrom, date_to: dateTo })
   if (error) throw error
@@ -94,6 +100,12 @@ export async function getUnresolvedNearMissReports(scopeMode = 'own', orgId = nu
   const { data, error } = await supabase.rpc('analytics_unresolved_near_miss_reports', { scope_mode: scopeMode, target_org_id: orgId })
   if (error) throw error
   return data
+}
+
+export async function getSafetyCultureScore(scopeMode = 'own', orgId = null, daysBack = 90) {
+  const { data, error } = await supabase.rpc('analytics_safety_culture_score', { scope_mode: scopeMode, target_org_id: orgId, days_back: daysBack })
+  if (error) throw error
+  return data?.[0] || null
 }
 
 export async function resolveHazardReport(reportId) {

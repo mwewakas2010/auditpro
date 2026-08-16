@@ -3,8 +3,9 @@ import {
   getModuleCounts, getJSARiskAnalytics, getJSARiskTransition, getOutstandingFLRAControls,
   getOverdueCCVItems, getJSAActionsNoted, getFatalRiskFrequency, getActivityByCompany,
   getHazardNearMissCounts, getControlHierarchyUsage, getTimeToClose,
-  getObservationTrend, getDailyReviewCompletion, getHazardClosureRate,
+  getDailyObservationTrend, getDailyReviewCompletion, getHazardClosureRate,
   getUnresolvedHazardReports, getUnresolvedNearMissReports,
+  getSafetyCultureScore,
   resolveHazardReport, resolveNearMissReport,
 } from '../lib/analyticsRepo'
 import { isPlatformAdmin, listAllOrganizations } from '../lib/platformAdminRepo'
@@ -60,13 +61,13 @@ function HorizontalBarChart({ data, width = 480, barHeight = 22, gap = 8, colorF
   )
 }
 
-function DonutChart({ data, size = 110, strokeWidth = 20 }) {
+function DonutChart({ data, size = 130, strokeWidth = 22 }) {
   const total = data.reduce((s, d) => s + d.value, 0)
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
   let offset = 0
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center justify-center gap-6 w-full">
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0">
         <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#F2EFE7" strokeWidth={strokeWidth} />
         {total > 0 && (
@@ -83,9 +84,9 @@ function DonutChart({ data, size = 110, strokeWidth = 20 }) {
             })}
           </g>
         )}
-        <text x={size / 2} y={size / 2 + 5} textAnchor="middle" fontSize="17" fontWeight="700" fill="#16253D">{total}</text>
+        <text x={size / 2} y={size / 2 + 5} textAnchor="middle" fontSize="19" fontWeight="700" fill="#16253D">{total}</text>
       </svg>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1.5">
         {data.map((d, i) => (
           <div key={i} className="flex items-center gap-1.5 text-[10px]">
             <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: d.color }} />
@@ -98,76 +99,244 @@ function DonutChart({ data, size = 110, strokeWidth = 20 }) {
   )
 }
 
+const CULTURE_COMPONENTS = [
+  { key: 'hazard_closure_score', label: 'Hazard Closure', weight: 0.15, color: '#2F6E4E' },
+  { key: 'near_miss_closure_score', label: 'Near Miss Closure', weight: 0.15, color: '#4C8C6B' },
+  { key: 'hierarchy_quality_score', label: 'Control Quality', weight: 0.20, color: '#16253D' },
+  { key: 'risk_reduction_score', label: 'Risk Reduction', weight: 0.20, color: '#B8862B' },
+  { key: 'daily_review_score', label: 'Daily Reviews', weight: 0.15, color: '#6B4C9A' },
+  { key: 'ccv_compliance_score', label: 'CCV Compliance', weight: 0.15, color: '#2C6E8F' },
+]
+
+function GaugeChart({ culture, size = 280 }) {
+  const score = culture?.overall_score != null ? Number(culture.overall_score) : null
+  const cx = size / 2
+  const cy = size / 2 + 6
+  const radius = size / 2 - 30
+  const strokeW = 26
+
+  const polar = (angleDeg, r) => {
+    const rad = (angleDeg * Math.PI) / 180
+    return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) }
+  }
+  const arcPath = (a1, a2, r) => {
+    const p1 = polar(a1, r)
+    const p2 = polar(a2, r)
+    return `M ${p1.x} ${p1.y} A ${r} ${r} 0 0 1 ${p2.x} ${p2.y}`
+  }
+  const scoreAngle = (s) => 180 - (Math.max(0, Math.min(100, s)) / 100) * 180
+
+  const hasScore = score != null
+  const clamped = hasScore ? Math.max(0, Math.min(100, score)) : 0
+  const needleAngle = scoreAngle(clamped)
+  const needleEnd = polar(needleAngle, radius - 14)
+
+  const zoneLabel = clamped < 40 ? 'Needs Attention' : clamped < 70 ? 'Developing' : 'Strong'
+  const zoneColor = clamped < 40 ? '#A83A2C' : clamped < 70 ? '#C08A1E' : '#2F6E4E'
+
+  const availableComponents = culture ? CULTURE_COMPONENTS.filter((c) => culture[c.key] != null) : []
+
+  return (
+    <div className="flex flex-col items-center flex-shrink-0" style={{ width: size }}>
+      <svg viewBox={`0 0 ${size} ${cy + 34}`} width="100%" style={{ maxWidth: size }}>
+        <path d={arcPath(180, 120, radius)} stroke="#A83A2C" strokeWidth={strokeW} fill="none" strokeLinecap="round" />
+        <path d={arcPath(120, 60, radius)} stroke="#C08A1E" strokeWidth={strokeW} fill="none" />
+        <path d={arcPath(60, 0, radius)} stroke="#2F6E4E" strokeWidth={strokeW} fill="none" strokeLinecap="round" />
+
+        {availableComponents.map((c) => {
+          const angle = scoreAngle(Number(culture[c.key]))
+          const inner = polar(angle, radius - strokeW / 2 - 4)
+          const outer = polar(angle, radius + strokeW / 2 + 4)
+          return <line key={c.key} x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke={c.color} strokeWidth="3" strokeLinecap="round" />
+        })}
+
+        {hasScore && (
+          <>
+            <line x1={cx} y1={cy} x2={needleEnd.x} y2={needleEnd.y} stroke="#16253D" strokeWidth="4" strokeLinecap="round" />
+            <circle cx={cx} cy={cy} r="8" fill="#16253D" />
+          </>
+        )}
+        <text x={cx} y={cy + 32} textAnchor="middle" fontSize="32" fontWeight="700" fill="#16253D">
+          {hasScore ? Math.round(score) : '—'}
+        </text>
+      </svg>
+      {hasScore && <div className="text-sm font-semibold -mt-1" style={{ color: zoneColor }}>{zoneLabel}</div>}
+      {!hasScore && <div className="text-xs text-inksoft italic -mt-1">Not enough data yet</div>}
+
+      <div className="flex items-center gap-3 mt-2 text-[10px] text-inksoft">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#A83A2C' }} /> 0–39</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#C08A1E' }} /> 40–69</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#2F6E4E' }} /> 70–100</span>
+      </div>
+    </div>
+  )
+}
+
+function ComponentBreakdownList({ culture }) {
+  const available = culture ? CULTURE_COMPONENTS.filter((c) => culture[c.key] != null) : []
+  if (!available.length) return null
+  return (
+    <div className="flex flex-col gap-2 w-full">
+      {available.map((c) => {
+        const val = Number(culture[c.key])
+        return (
+          <div key={c.key} className="flex items-center gap-2">
+            <div className="w-[110px] flex-shrink-0 text-[10.5px] text-inksoft truncate">{c.label}</div>
+            <div className="flex-1 h-2.5 rounded-full bg-[#F2EFE7] overflow-hidden">
+              <div className="h-full rounded-full" style={{ width: `${val}%`, background: c.color }} />
+            </div>
+            <div className="w-9 flex-shrink-0 text-right text-[10.5px] font-semibold text-navy">{Math.round(val)}</div>
+            <div className="w-9 flex-shrink-0 text-right text-[9px] text-inksoft">{Math.round(c.weight * 100)}%</div>
+          </div>
+        )
+      })}
+      <div className="flex items-center gap-2 text-[9px] text-inksoft mt-0.5">
+        <div className="w-[110px] flex-shrink-0" />
+        <div className="flex-1" />
+        <div className="w-9 flex-shrink-0 text-right">score</div>
+        <div className="w-9 flex-shrink-0 text-right">weight</div>
+      </div>
+    </div>
+  )
+}
+
+
 function RiskMatrix({ transitions }) {
   const bands = ['high', 'medium', 'low']
   const bandLabel = { high: 'High', medium: 'Medium', low: 'Low' }
   const getCount = (raw, residual) => Number(transitions.find((t) => t.raw_band === raw && t.residual_band === residual)?.count || 0)
   const total = transitions.reduce((s, t) => s + Number(t.count), 0)
 
-  const cellColor = (raw, residual) => {
-    const count = getCount(raw, residual)
-    if (count === 0) return '#FCFBF8'
+  // bands[0]='high' (worst) ... bands[2]='low' (best), so a HIGHER index
+  // means LOWER/better risk. Moving to a higher index = improvement.
+  const outcome = (raw, residual) => {
     const rawIdx = bands.indexOf(raw)
     const residualIdx = bands.indexOf(residual)
-    if (residualIdx > rawIdx) return '#F8E7E3'
-    if (residualIdx === rawIdx) return '#FBF0DB'
-    return '#E6F0EA'
+    if (residualIdx > rawIdx) return 'improved'
+    if (residualIdx === rawIdx) return 'unchanged'
+    return 'worsened'
   }
-  const textColor = (raw, residual) => {
-    const rawIdx = bands.indexOf(raw)
-    const residualIdx = bands.indexOf(residual)
-    if (residualIdx > rawIdx) return '#A83A2C'
-    if (residualIdx === rawIdx) return '#C08A1E'
-    return '#2F6E4E'
+  const OUTCOME_STYLE = {
+    improved: { bg: '#DCEDE3', text: '#2F6E4E', border: '#B7DAC5' },
+    unchanged: { bg: '#F7EAC9', text: '#96690F', border: '#EED89B' },
+    worsened: { bg: '#F3CFC7', text: '#A83A2C', border: '#E8AC9F' },
   }
+
+  const improvedCount = transitions.filter((t) => outcome(t.raw_band, t.residual_band) === 'improved').reduce((s, t) => s + Number(t.count), 0)
+  const improvedPct = total > 0 ? Math.round((improvedCount / total) * 100) : null
 
   if (total === 0) return <div className="text-xs text-inksoft italic">No data yet.</div>
 
   return (
-    <div>
-      <div className="grid gap-1" style={{ gridTemplateColumns: '70px repeat(3, 1fr)' }}>
-        <div />
-        {bands.map((c) => (
-          <div key={c} className="text-center text-[10px] font-semibold text-navy2 pb-1">{bandLabel[c]}</div>
-        ))}
-        {bands.map((r) => (
-          <Fragment key={r}>
-            <div className="text-[10px] font-semibold text-navy2 flex items-center justify-end pr-2">{bandLabel[r]}</div>
-            {bands.map((c) => {
-              const count = getCount(r, c)
-              return (
-                <div
-                  key={r + c}
-                  className="rounded flex items-center justify-center font-bold text-sm"
-                  style={{ background: cellColor(r, c), color: textColor(r, c), height: 44 }}
-                  title={`Raw ${bandLabel[r]} → Residual ${bandLabel[c]}: ${count}`}
-                >
-                  {count > 0 ? count : ''}
-                </div>
-              )
-            })}
-          </Fragment>
-        ))}
+    <div className="w-full">
+      {improvedPct != null && (
+        <div className="flex items-baseline gap-2 mb-3">
+          <span className="text-2xl font-display font-bold text-conform">{improvedPct}%</span>
+          <span className="text-[11px] text-inksoft">of scored steps show reduced risk after controls</span>
+        </div>
+      )}
+      <div className="w-full overflow-x-auto">
+        <div className="grid gap-1.5 w-full" style={{ gridTemplateColumns: '60px repeat(3, minmax(0, 1fr))' }}>
+          <div />
+          {bands.map((c) => (
+            <div key={c} className="text-center text-[11px] font-semibold text-navy2 pb-1">{bandLabel[c]}</div>
+          ))}
+          {bands.map((r) => (
+            <Fragment key={r}>
+              <div className="text-[11px] font-semibold text-navy2 flex items-center justify-end pr-2">{bandLabel[r]}</div>
+              {bands.map((c) => {
+                const count = getCount(r, c)
+                const style = count > 0 ? OUTCOME_STYLE[outcome(r, c)] : { bg: '#FCFBF8', text: '#C9C2B0', border: '#EEE9DD' }
+                return (
+                  <div
+                    key={r + c}
+                    className="rounded-md flex items-center justify-center font-bold text-lg border"
+                    style={{ background: style.bg, color: style.text, borderColor: style.border, height: 64 }}
+                    title={`Raw ${bandLabel[r]} → Residual ${bandLabel[c]}: ${count}`}
+                  >
+                    {count > 0 ? count : '–'}
+                  </div>
+                )
+              })}
+            </Fragment>
+          ))}
+        </div>
       </div>
-      <div className="flex items-center gap-3 mt-2 text-[9.5px] text-inksoft">
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#E6F0EA' }} /> Improved</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#FBF0DB' }} /> Unchanged</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#F8E7E3' }} /> Worsened</span>
+      <div className="flex items-center gap-3 mt-2.5 text-[10px] text-inksoft">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: OUTCOME_STYLE.improved.bg, border: `1px solid ${OUTCOME_STYLE.improved.border}` }} /> Improved</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: OUTCOME_STYLE.unchanged.bg, border: `1px solid ${OUTCOME_STYLE.unchanged.border}` }} /> Unchanged</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: OUTCOME_STYLE.worsened.bg, border: `1px solid ${OUTCOME_STYLE.worsened.border}` }} /> Worsened</span>
       </div>
-      <div className="text-[9.5px] text-inksoft mt-1">Rows = Raw Risk, Columns = Residual Risk. {total} scored step(s) total.</div>
+      <div className="text-[10px] text-inksoft mt-1">Rows = Raw Risk, Columns = Residual Risk. {total} scored step(s) total.</div>
     </div>
   )
 }
 
-function Sparkline({ data, width = 380, height = 44 }) {
-  if (!data.length) return null
-  const max = Math.max(...data.map((d) => d.flra_count + d.ccv_count), 1)
-  const stepX = width / Math.max(1, data.length - 1)
-  const points = data.map((d, i) => `${i * stepX},${height - ((d.flra_count + d.ccv_count) / max) * height}`).join(' ')
+function DailyTrendChart({ data, width = 460, height = 190 }) {
+  if (!data.length) return <div className="text-xs text-inksoft italic">No data yet.</div>
+
+  const marginLeft = 28, marginRight = 34, marginTop = 10, marginBottom = 22
+  const chartW = width - marginLeft - marginRight
+  const chartH = height - marginTop - marginBottom
+
+  let running = 0
+  const points = data.map((d) => {
+    const dailyTotal = Number(d.flra_count) + Number(d.ccv_count)
+    running += dailyTotal
+    return { ...d, dailyTotal, cumulative: running }
+  })
+
+  const barMax = Math.max(...points.map((p) => p.dailyTotal), 1)
+  const lineMax = Math.max(...points.map((p) => p.cumulative), 1)
+  const step = chartW / points.length
+  const barW = Math.max(2, step * 0.55)
+
+  const barY = (v) => marginTop + chartH - (v / barMax) * chartH
+  const barH = (v) => (v / barMax) * chartH
+  const lineY = (v) => marginTop + chartH - (v / lineMax) * chartH
+
+  const linePoints = points.map((p, i) => `${marginLeft + i * step + step / 2},${lineY(p.cumulative)}`).join(' ')
+  const labelEvery = Math.max(1, Math.ceil(points.length / 6))
+
   return (
     <svg viewBox={`0 0 ${width} ${height}`} width="100%">
-      <polyline points={points} fill="none" stroke="#16253D" strokeWidth="2" />
-      {data.map((d, i) => <circle key={i} cx={i * stepX} cy={height - ((d.flra_count + d.ccv_count) / max) * height} r="2" fill="#B8862B" />)}
+      {/* baseline */}
+      <line x1={marginLeft} y1={marginTop + chartH} x2={width - marginRight} y2={marginTop + chartH} stroke="#E4DFD2" strokeWidth="1" />
+
+      {/* bars: daily count, primary (left) axis */}
+      {points.map((p, i) => (
+        <rect
+          key={i}
+          x={marginLeft + i * step + (step - barW) / 2}
+          y={barY(p.dailyTotal)}
+          width={barW}
+          height={barH(p.dailyTotal)}
+          fill="#B8862B"
+          opacity="0.75"
+          rx="1.5"
+        >
+          <title>{`${p.obs_day}: ${p.dailyTotal} record(s)`}</title>
+        </rect>
+      ))}
+
+      {/* cumulative line, secondary (right) axis */}
+      <polyline points={linePoints} fill="none" stroke="#16253D" strokeWidth="2" />
+      {points.map((p, i) => (
+        <circle key={i} cx={marginLeft + i * step + step / 2} cy={lineY(p.cumulative)} r="2" fill="#16253D">
+          <title>{`${p.obs_day}: ${p.cumulative} cumulative`}</title>
+        </circle>
+      ))}
+
+      {/* axis labels */}
+      <text x={2} y={marginTop + 4} fontSize="8.5" fill="#B8862B" fontWeight="600">Daily</text>
+      <text x={width - 2} y={marginTop + 4} fontSize="8.5" fill="#16253D" fontWeight="600" textAnchor="end">Cumulative</text>
+
+      {/* x-axis date ticks, sparse to avoid crowding */}
+      {points.map((p, i) => (i % labelEvery === 0 || i === points.length - 1) && (
+        <text key={i} x={marginLeft + i * step + step / 2} y={height - 5} fontSize="8" fill="#5B5F66" textAnchor="middle">
+          {p.obs_day.slice(5)}
+        </text>
+      ))}
     </svg>
   )
 }
@@ -237,7 +406,14 @@ export default function Dashboard() {
   const [hierarchyUsage, setHierarchyUsage] = useState([])
   const [timeToClose, setTimeToClose] = useState(null)
   const [timeToClosePrev, setTimeToClosePrev] = useState(null)
-  const [observationTrend, setObservationTrend] = useState([])
+  const [dailyObservationTrend, setDailyObservationTrend] = useState([])
+  const [trendStartDate, setTrendStartDate] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 30)
+    return d.toISOString().slice(0, 10)
+  })
+  const [trendRangeDays, setTrendRangeDays] = useState(30)
+  const [safetyCulture, setSafetyCulture] = useState(null)
   const [dailyReviewCompletion, setDailyReviewCompletion] = useState(null)
   const [dailyReviewCompletionPrev, setDailyReviewCompletionPrev] = useState(null)
   const [hazardClosure, setHazardClosure] = useState([])
@@ -273,7 +449,6 @@ export default function Dashboard() {
       getControlHierarchyUsage(scopeMode, orgId),
       getTimeToClose(scopeMode, orgId, periods.current.from, periods.current.to),
       getTimeToClose(scopeMode, orgId, periods.previous.from, periods.previous.to),
-      getObservationTrend(scopeMode, orgId, 12),
       getDailyReviewCompletion(scopeMode, orgId, periods.current.from, periods.current.to),
       getDailyReviewCompletion(scopeMode, orgId, periods.previous.from, periods.previous.to),
       getHazardClosureRate(scopeMode, orgId, periods.current.from, periods.current.to),
@@ -281,10 +456,10 @@ export default function Dashboard() {
       getUnresolvedHazardReports(scopeMode, orgId),
       getUnresolvedNearMissReports(scopeMode, orgId),
     ])
-      .then(([mc, jr, jrt, ofc, occ, ja, frf, abc, hnm, hu, ttc, ttcPrev, ot, drc, drcPrev, hc, hcPrev, uh, unm]) => {
+      .then(([mc, jr, jrt, ofc, occ, ja, frf, abc, hnm, hu, ttc, ttcPrev, drc, drcPrev, hc, hcPrev, uh, unm]) => {
         setModuleCounts(mc); setJsaRisk(jr); setJsaRiskTransition(jrt); setOutstandingFlra(ofc); setOverdueCcv(occ)
         setJsaActions(ja); setFatalRiskFreq(frf); setActivityByCompany(abc); setHazardNearMiss(hnm)
-        setHierarchyUsage(hu); setTimeToClose(ttc); setTimeToClosePrev(ttcPrev); setObservationTrend(ot)
+        setHierarchyUsage(hu); setTimeToClose(ttc); setTimeToClosePrev(ttcPrev)
         setDailyReviewCompletion(drc); setDailyReviewCompletionPrev(drcPrev)
         setHazardClosure(hc); setHazardClosurePrev(hcPrev)
         setUnresolvedHazards(uh); setUnresolvedNearMisses(unm)
@@ -292,6 +467,22 @@ export default function Dashboard() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [scopeMode, orgFilter, dateFrom, dateTo])
+
+  useEffect(() => {
+    const orgId = scopeMode === 'platform' ? (orgFilter || null) : null
+    const start = new Date(trendStartDate)
+    const end = new Date(start)
+    end.setDate(end.getDate() + trendRangeDays)
+    const today = new Date()
+    const cappedEnd = end > today ? today : end
+    const dateTo = cappedEnd.toISOString().slice(0, 10)
+    getDailyObservationTrend(scopeMode, orgId, trendRangeDays, trendStartDate, dateTo).then(setDailyObservationTrend).catch(() => {})
+  }, [scopeMode, orgFilter, trendStartDate, trendRangeDays])
+
+  useEffect(() => {
+    const orgId = scopeMode === 'platform' ? (orgFilter || null) : null
+    getSafetyCultureScore(scopeMode, orgId, 90).then(setSafetyCulture).catch(() => {})
+  }, [scopeMode, orgFilter])
 
   const refreshClosure = () => {
     const orgId = scopeMode === 'platform' ? (orgFilter || null) : null
@@ -345,6 +536,17 @@ export default function Dashboard() {
       {error && <div className="text-sm text-major bg-majorbg border border-major rounded p-2.5 mb-3">{error}</div>}
       {loading && <div className="text-sm text-inksoft mb-3">Loading…</div>}
 
+      <div className="bg-white border border-line rounded-md p-5 mb-2 max-w-3xl">
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+          <GaugeChart culture={safetyCulture} size={280} />
+          <div className="flex-1 w-full pt-1">
+            <div className="font-display text-base font-bold text-navy mb-1">Safety Culture Score</div>
+            <div className="text-[11px] text-inksoft mb-3">Fixed 90-day window, independent of the filters above. Each metric below shows how well it's performing and how much weight it carries toward the final score.</div>
+            <ComponentBreakdownList culture={safetyCulture} />
+          </div>
+        </div>
+      </div>
+
       <SectionHeader title="Leading Indicators" borderColor="#2F6E4E" />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
@@ -378,13 +580,28 @@ export default function Dashboard() {
         <div className="bg-white border border-line rounded-md p-3">
           <div className="font-display text-[13px] font-semibold text-navy mb-2">Control Hierarchy Usage (JSA)</div>
           <div className="text-[10px] text-inksoft mb-2">Elimination/Engineering are stronger than Administrative/PPE.</div>
-          <DonutChart data={hierarchyDonut} />
+          <HorizontalBarChart data={hierarchyDonut.map((d) => ({ label: d.label, value: d.value }))} colorFor={(d) => hierarchyDonut.find((h) => h.label === d.label)?.color} />
         </div>
 
         <div className="bg-white border border-line rounded-md p-3">
-          <div className="font-display text-[13px] font-semibold text-navy mb-2">Observation Trend (12 weeks)</div>
-          <div className="text-[10px] text-inksoft mb-2">FLRA + CCV volume — rising signals more proactive checking.</div>
-          <Sparkline data={observationTrend} />
+          <div className="font-display text-[13px] font-semibold text-navy mb-2">Observation Trend</div>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <label className="text-[10px] text-inksoft">Start</label>
+            <input type="date" className="px-1.5 py-0.5 border border-line rounded text-[10px]" value={trendStartDate} onChange={(e) => setTrendStartDate(e.target.value)} />
+            <div className="flex gap-1">
+              {[7, 30, 90].map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setTrendRangeDays(v)}
+                  className={`text-[10px] px-1.5 py-0.5 rounded border ${trendRangeDays === v ? 'bg-navy text-white border-navy' : 'border-line bg-white text-inksoft'}`}
+                >
+                  {v}d
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="text-[10px] text-inksoft mb-2">Bars = daily FLRA + CCV records (left axis). Line = cumulative total (right axis).</div>
+          <DailyTrendChart data={dailyObservationTrend} />
         </div>
       </div>
 
@@ -393,7 +610,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="bg-white border border-line rounded-md p-3">
           <div className="font-display text-[13px] font-semibold text-navy mb-2">Records by Module</div>
-          <DonutChart data={moduleTotals} />
+          <DonutChart data={moduleTotals} size={170} strokeWidth={28} />
         </div>
 
         <div className="bg-white border border-line rounded-md p-3">
