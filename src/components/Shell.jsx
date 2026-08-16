@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { AUDIT_TABS } from './AuditEditor.jsx'
 import Dashboard from './Dashboard.jsx'
@@ -12,6 +12,8 @@ import FLRALanding from './FLRALanding.jsx'
 import FLRAEditor from './FLRAEditor.jsx'
 import JSAList from './JSAList.jsx'
 import JSAEditor from './JSAEditor.jsx'
+import PlatformDashboard from './PlatformDashboard.jsx'
+import { isPlatformAdmin } from '../lib/platformAdminRepo'
 import {
   LayoutDashboard,
   ClipboardList,
@@ -19,6 +21,7 @@ import {
   ShieldCheck,
   ClipboardCheck,
   FileSpreadsheet,
+  ShieldAlert,
   FileText,
   ListChecks,
   Search,
@@ -45,9 +48,16 @@ const AUDIT_TAB_MOBILE = {
 
 export default function Shell() {
   const [section, setSection] = useState('dashboard') // 'dashboard' | 'audits' | 'companies' | 'editor' | 'ccvs' | 'ccv-editor' | 'flras' | 'flra-editor'
+  const [isAdmin, setIsAdmin] = useState(false)
   const [auditId, setAuditId] = useState(null)
   const [auditTab, setAuditTab] = useState('setup')
   const [editorKey, setEditorKey] = useState(0)
+
+  useEffect(() => {
+    isPlatformAdmin().then(setIsAdmin).catch(() => {})
+  }, [])
+
+  const navItems = isAdmin ? [...APP_NAV, { key: 'platform', label: 'Platform Admin', icon: ShieldAlert }] : APP_NAV
 
   const [ccvId, setCcvId] = useState(null)
   const [ccvTemplateId, setCcvTemplateId] = useState(null)
@@ -156,7 +166,7 @@ export default function Shell() {
         </div>
 
         <div className="py-3.5">
-          {APP_NAV.map((item) => (
+          {navItems.map((item) => (
             <div
               key={item.key}
               onClick={() => goToSection(item.key)}
@@ -255,6 +265,7 @@ export default function Shell() {
         {section === 'jsa-editor' && (
           <JSAEditor key={jsaEditorKey} jsaId={jsaId} organizationId={null} onExit={() => goToSection('jsas')} />
         )}
+        {section === 'platform' && isAdmin && <PlatformDashboard />}
       </div>
 
       {/* ===== Mobile bottom tab bar ===== */}
@@ -277,7 +288,7 @@ export default function Shell() {
                 </button>
               )
             })
-          : APP_NAV.map((item) => {
+          : navItems.map((item) => {
               const Icon = item.icon
               const active =
                 section === item.key ||

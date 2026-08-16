@@ -96,7 +96,7 @@ export async function listPendingCCVs() {
 
 // ---- FLRAs ----
 
-export async function saveLocalFLRA(localId, { instance, hazardRows, safetyChecks, riskControls, pendingSync }) {
+export async function saveLocalFLRA(localId, { instance, hazardRows, safetyChecks, riskControls, hazardReports, nearMissReports, pendingSync }) {
   const db = await getDB()
   await db.put(FLRAS_STORE, {
     localId,
@@ -104,6 +104,8 @@ export async function saveLocalFLRA(localId, { instance, hazardRows, safetyCheck
     hazardRows,
     safetyChecks,
     riskControls,
+    hazardReports,
+    nearMissReports,
     pendingSync: !!pendingSync,
     savedAt: new Date().toISOString(),
   })

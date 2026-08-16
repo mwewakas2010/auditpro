@@ -38,6 +38,10 @@ export default function FLRAEditor({ flraId, organizationId, initialCompanyId, i
   const [hazardRows, setHazardRows] = useState(emptyHazardRows)
   const [safetyChecks, setSafetyChecks] = useState({})
   const [riskControls, setRiskControls] = useState({})
+  const [hazardObserved, setHazardObserved] = useState(null) // null | 'yes' | 'no'
+  const [hazardReports, setHazardReports] = useState([])
+  const [nearMissObserved, setNearMissObserved] = useState(null)
+  const [nearMissReports, setNearMissReports] = useState([])
   const [acknowledgedAt] = useState(initialAcknowledgedAt || null)
   const [signoffs, setSignoffs] = useState({ employee: null, supervisor: null })
   const [savedSignature, setSavedSignature] = useState(null)
@@ -72,6 +76,10 @@ export default function FLRAEditor({ flraId, organizationId, initialCompanyId, i
             setHazardRows(local.hazardRows)
             setSafetyChecks(local.safetyChecks)
             setRiskControls(local.riskControls || {})
+            setHazardReports(local.hazardReports || [])
+            setNearMissReports(local.nearMissReports || [])
+            setHazardObserved(local.hazardReports?.length ? 'yes' : null)
+            setNearMissObserved(local.nearMissReports?.length ? 'yes' : null)
             setOfflineLoaded(true)
             setLoading(false)
             return
@@ -93,11 +101,17 @@ export default function FLRAEditor({ flraId, organizationId, initialCompanyId, i
           setHazardRows(result.hazardRows.length ? result.hazardRows.map((r) => ({ hazardText: r.hazard_text, controlText: r.control_text })) : emptyHazardRows())
           setSafetyChecks(result.safetyChecks)
           setRiskControls(result.riskControls)
+          setHazardReports(result.hazardReports || [])
+          setNearMissReports(result.nearMissReports || [])
+          setHazardObserved(result.hazardReports?.length ? 'yes' : null)
+          setNearMissObserved(result.nearMissReports?.length ? 'yes' : null)
           await saveLocalFLRA(flraId, {
             instance: { meta: loadedMeta, companyId: result.instance.company_id || null, organizationId, acknowledgedAt: result.instance.acknowledged_at },
             hazardRows: result.hazardRows.map((r) => ({ hazardText: r.hazard_text, controlText: r.control_text })),
             safetyChecks: result.safetyChecks,
             riskControls: result.riskControls,
+            hazardReports: result.hazardReports || [],
+            nearMissReports: result.nearMissReports || [],
             pendingSync: false,
           })
         }
@@ -110,6 +124,10 @@ export default function FLRAEditor({ flraId, organizationId, initialCompanyId, i
             setHazardRows(local.hazardRows)
             setSafetyChecks(local.safetyChecks)
             setRiskControls(local.riskControls || {})
+            setHazardReports(local.hazardReports || [])
+            setNearMissReports(local.nearMissReports || [])
+            setHazardObserved(local.hazardReports?.length ? 'yes' : null)
+            setNearMissObserved(local.nearMissReports?.length ? 'yes' : null)
             setOfflineLoaded(true)
           } else {
             setLoadError(err.message)
@@ -127,11 +145,13 @@ export default function FLRAEditor({ flraId, organizationId, initialCompanyId, i
         hazardRows,
         safetyChecks,
         riskControls,
+        hazardReports,
+        nearMissReports,
         pendingSync: true,
       })
     }, 600)
     return () => clearTimeout(t)
-  }, [meta, companyId, hazardRows, safetyChecks, riskControls, localId])
+  }, [meta, companyId, hazardRows, safetyChecks, riskControls, hazardReports, nearMissReports, localId])
 
   useEffect(() => {
     let wasOffline = !online
@@ -202,7 +222,7 @@ export default function FLRAEditor({ flraId, organizationId, initialCompanyId, i
     const newMeta = markFinal ? { ...meta, status: 'final' } : meta
 
     if (!online) {
-      await saveLocalFLRA(localId, { instance: { meta: newMeta, companyId, organizationId, acknowledgedAt }, hazardRows, safetyChecks, riskControls, pendingSync: true })
+      await saveLocalFLRA(localId, { instance: { meta: newMeta, companyId, organizationId, acknowledgedAt }, hazardRows, safetyChecks, riskControls, hazardReports, nearMissReports, pendingSync: true })
       setMeta(newMeta)
       setSaveMsg("📴 Offline — saved on this device. Will sync automatically once you're back online.")
       setSaving(false)
@@ -210,15 +230,15 @@ export default function FLRAEditor({ flraId, organizationId, initialCompanyId, i
     }
 
     try {
-      const savedId = await saveFLRA({ flraId: id, organizationId, companyId, meta: newMeta, hazardRows, safetyChecks, riskControls, acknowledgedAt })
+      const savedId = await saveFLRA({ flraId: id, organizationId, companyId, meta: newMeta, hazardRows, safetyChecks, riskControls, acknowledgedAt, hazardReports, nearMissReports })
       if (localId !== savedId) { await deleteLocalFLRA(localId); setLocalId(savedId) }
       setId(savedId)
       setMeta(newMeta)
-      await saveLocalFLRA(savedId, { instance: { meta: newMeta, companyId, organizationId, acknowledgedAt }, hazardRows, safetyChecks, riskControls, pendingSync: false })
+      await saveLocalFLRA(savedId, { instance: { meta: newMeta, companyId, organizationId, acknowledgedAt }, hazardRows, safetyChecks, riskControls, hazardReports, nearMissReports, pendingSync: false })
       setSaveMsg('Saved ' + new Date().toLocaleTimeString())
       setOfflineLoaded(false)
     } catch (err) {
-      await saveLocalFLRA(localId, { instance: { meta: newMeta, companyId, organizationId, acknowledgedAt }, hazardRows, safetyChecks, riskControls, pendingSync: true })
+      await saveLocalFLRA(localId, { instance: { meta: newMeta, companyId, organizationId, acknowledgedAt }, hazardRows, safetyChecks, riskControls, hazardReports, nearMissReports, pendingSync: true })
       const looksLikeNetworkFailure = !online || err.name === 'TypeError' || /fetch|network/i.test(err.message || '')
       setSaveMsg(
         looksLikeNetworkFailure
@@ -591,6 +611,77 @@ export default function FLRAEditor({ flraId, organizationId, initialCompanyId, i
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Hazard & Near Miss Reporting */}
+      <div className="bg-white border border-line rounded-md p-4 md:p-5 mb-5">
+        <h3 className="font-display text-[15px] font-semibold text-navy mb-3">Hazard & Near Miss Reporting</h3>
+
+        <div className="mb-5">
+          <label className="block text-[11.5px] font-semibold text-navy2 mb-2 uppercase tracking-wide">Have you observed any hazard?</label>
+          <div className="flex gap-2 mb-3">
+            {['yes', 'no'].map((v) => (
+              <button
+                key={v}
+                onClick={() => { setHazardObserved(v); if (v === 'no') setHazardReports([]) }}
+                className={`text-xs px-3 py-1.5 rounded border uppercase ${hazardObserved === v ? 'bg-navy text-white border-navy' : 'border-line bg-white'}`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          {hazardObserved === 'yes' && (
+            <div className="flex flex-col gap-2">
+              {hazardReports.map((h, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    className={inputCls}
+                    placeholder="Describe the hazard observed"
+                    value={h}
+                    onChange={(e) => setHazardReports((rows) => rows.map((r, idx) => (idx === i ? e.target.value : r)))}
+                  />
+                  <button onClick={() => setHazardReports((rows) => rows.filter((_, idx) => idx !== i))} className="text-xs text-major px-2">✕</button>
+                </div>
+              ))}
+              <button onClick={() => setHazardReports((rows) => [...rows, ''])} className="text-xs text-navy2 underline self-start">
+                + Add another hazard
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-[11.5px] font-semibold text-navy2 mb-2 uppercase tracking-wide">Is there a near miss to report?</label>
+          <div className="flex gap-2 mb-3">
+            {['yes', 'no'].map((v) => (
+              <button
+                key={v}
+                onClick={() => { setNearMissObserved(v); if (v === 'no') setNearMissReports([]) }}
+                className={`text-xs px-3 py-1.5 rounded border uppercase ${nearMissObserved === v ? 'bg-navy text-white border-navy' : 'border-line bg-white'}`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          {nearMissObserved === 'yes' && (
+            <div className="flex flex-col gap-2">
+              {nearMissReports.map((n, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    className={inputCls}
+                    placeholder="Describe the near miss"
+                    value={n}
+                    onChange={(e) => setNearMissReports((rows) => rows.map((r, idx) => (idx === i ? e.target.value : r)))}
+                  />
+                  <button onClick={() => setNearMissReports((rows) => rows.filter((_, idx) => idx !== i))} className="text-xs text-major px-2">✕</button>
+                </div>
+              ))}
+              <button onClick={() => setNearMissReports((rows) => [...rows, ''])} className="text-xs text-navy2 underline self-start">
+                + Add another near miss
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

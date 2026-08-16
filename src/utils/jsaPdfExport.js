@@ -3,13 +3,17 @@ import autoTable from 'jspdf-autotable'
 import { riskBand, LIKELIHOOD_LEVELS, CONSEQUENCE_LEVELS, CONTROL_HIERARCHY } from '../data/jsaContent'
 
 const NAVY = [22, 37, 61]
+const NAVY2 = [44, 74, 107]
+const GOLD = [184, 134, 43]
 const INK = [34, 38, 43]
 const INK_SOFT = [91, 95, 102]
 const LINE = [220, 214, 200]
 const CONFORM = [230, 240, 234]
 const CONFORM_TXT = [47, 110, 78]
+const CONFORM_FULL = [47, 110, 78]
 const MINOR = [251, 240, 219]
 const MINOR_TXT = [192, 138, 30]
+const MINOR_FULL = [192, 138, 30]
 const MAJOR = [248, 231, 227]
 const MAJOR_TXT = [168, 58, 44]
 
@@ -17,6 +21,18 @@ const MARGIN = 14
 const PAGE_W = 210
 const PAGE_H = 297
 const CONTENT_W = PAGE_W - MARGIN * 2
+
+// Colored section header band - matches the accent colors used in the
+// live JSA editor, so the PDF reads consistently with the app.
+function sectionBand(doc, title, y, color) {
+  doc.setFillColor(...color)
+  doc.roundedRect(MARGIN, y, CONTENT_W, 8, 1, 1, 'F')
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10.5)
+  doc.setTextColor(255, 255, 255)
+  doc.text(title, MARGIN + 3, y + 5.5)
+  return y + 12
+}
 
 function bandColors(color) {
   if (color === 'major') return { fill: MAJOR, text: MAJOR_TXT }
@@ -132,8 +148,7 @@ export async function generateJSAPdf({ meta, companyId, companies, steps, signof
 
   // Job Safety Analysis Log
   if (y > PAGE_H - 40) { doc.addPage(); y = 20 }
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...NAVY)
-  doc.text('Job Safety Analysis Log', MARGIN, y); y += 6
+  y = sectionBand(doc, 'JOB SAFETY ANALYSIS LOG', y, GOLD)
 
   const likelihoodLabel = (v) => LIKELIHOOD_LEVELS.find((l) => l.value === v)?.label || '—'
   const consequenceLabel = (v) => CONSEQUENCE_LEVELS.find((c) => c.value === v)?.label || '—'
@@ -179,8 +194,7 @@ export async function generateJSAPdf({ meta, companyId, companies, steps, signof
 
   // Team Member Acknowledgement
   if (y > PAGE_H - 50) { doc.addPage(); y = 20 }
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...NAVY)
-  doc.text('Team Member Acknowledgement', MARGIN, y); y += 6
+  y = sectionBand(doc, 'TEAM MEMBER ACKNOWLEDGEMENT', y, CONFORM_FULL)
 
   const teamSignoffs = (signoffs || []).filter((s) => s.role === 'team_member')
   if (!teamSignoffs.length) {
@@ -199,8 +213,7 @@ export async function generateJSAPdf({ meta, companyId, companies, steps, signof
 
   // Supervisor Acknowledgements
   if (y > PAGE_H - 50) { doc.addPage(); y = 20 }
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...NAVY)
-  doc.text('Supervisor Acknowledgement', MARGIN, y); y += 8
+  y = sectionBand(doc, 'SUPERVISOR ACKNOWLEDGEMENT', y, NAVY2)
 
   const signRow = async (label, signoff) => {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...INK)
@@ -229,8 +242,7 @@ export async function generateJSAPdf({ meta, companyId, companies, steps, signof
   // Daily reviews, if any
   if (dailyReviews && dailyReviews.length) {
     if (y > PAGE_H - 50) { doc.addPage(); y = 20 }
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...NAVY)
-    doc.text('Daily Review (Multi-Shift Use)', MARGIN, y); y += 6
+    y = sectionBand(doc, 'DAILY REVIEW (MULTI-SHIFT USE)', y, MINOR_FULL)
     autoTable(doc, {
       startY: y, theme: 'grid', margin: { left: MARGIN, right: MARGIN },
       styles: { fontSize: 8, cellPadding: 2 },

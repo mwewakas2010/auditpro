@@ -57,10 +57,18 @@ export async function loadFLRA(id) {
   const signoffs = {}
   signoffRows.forEach((r) => { signoffs[r.role] = r })
 
-  return { instance, company, hazardRows, safetyChecks, riskControls, signoffs }
+  const { data: hazardReportRows, error: hrErr } = await supabase.from('flra_hazard_reports').select('*').eq('flra_id', id).order('created_at')
+  if (hrErr) throw hrErr
+  const hazardReports = hazardReportRows.map((r) => r.hazard_text)
+
+  const { data: nearMissRows, error: nmErr } = await supabase.from('flra_near_miss_reports').select('*').eq('flra_id', id).order('created_at')
+  if (nmErr) throw nmErr
+  const nearMissReports = nearMissRows.map((r) => r.description)
+
+  return { instance, company, hazardRows, safetyChecks, riskControls, signoffs, hazardReports, nearMissReports }
 }
 
-export async function saveFLRA({ flraId, organizationId, companyId, meta, hazardRows, safetyChecks, riskControls, acknowledgedAt }) {
+export async function saveFLRA({ flraId, organizationId, companyId, meta, hazardRows, safetyChecks, riskControls, acknowledgedAt, hazardReports, nearMissReports }) {
   const { data: userData } = await supabase.auth.getUser()
   const owner = userData?.user?.id
 
@@ -134,6 +142,22 @@ export async function saveFLRA({ flraId, organizationId, companyId, meta, hazard
     if (error) throw error
   }
 
+  // Hazard reports and near-miss reports: simplest correct approach for
+  // small, fully-replaced lists - delete and reinsert
+  await supabase.from('flra_hazard_reports').delete().eq('flra_id', id)
+  const hazardReportsToInsert = (hazardReports || []).filter((h) => h && h.trim()).map((h) => ({ flra_id: id, hazard_text: h }))
+  if (hazardReportsToInsert.length) {
+    const { error } = await supabase.from('flra_hazard_reports').insert(hazardReportsToInsert)
+    if (error) throw error
+  }
+
+  await supabase.from('flra_near_miss_reports').delete().eq('flra_id', id)
+  const nearMissToInsert = (nearMissReports || []).filter((n) => n && n.trim()).map((n) => ({ flra_id: id, description: n }))
+  if (nearMissToInsert.length) {
+    const { error } = await supabase.from('flra_near_miss_reports').insert(nearMissToInsert)
+    if (error) throw error
+  }
+
   return id
 }
 
@@ -155,6 +179,8 @@ export async function syncPendingFLRAs() {
         safetyChecks: entry.safetyChecks,
         riskControls: entry.riskControls,
         acknowledgedAt: entry.instance.acknowledgedAt,
+        hazardReports: entry.hazardReports,
+        nearMissReports: entry.nearMissReports,
       })
       await deleteLocalFLRA(entry.localId)
       synced.push({ localId: entry.localId, realId })

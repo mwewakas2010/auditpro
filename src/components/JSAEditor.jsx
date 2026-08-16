@@ -326,8 +326,8 @@ export default function JSAEditor({ jsaId, organizationId, onExit }) {
       )}
 
       {/* JSA Summary header */}
-      <details className="bg-white border border-line rounded-md mb-5">
-        <summary className="cursor-pointer px-4 md:px-5 py-3 font-display text-[15px] font-semibold text-navy list-none">JSA Summary</summary>
+      <details className="bg-white border border-line rounded-md border-t-4 border-t-navy mb-5">
+        <summary className="cursor-pointer px-4 md:px-5 py-3 font-display text-[15px] font-semibold text-navy list-none flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-navy flex-shrink-0"></span>JSA Summary</summary>
         <div className="px-4 md:px-5 pb-4 md:pb-5">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
@@ -466,8 +466,8 @@ export default function JSAEditor({ jsaId, organizationId, onExit }) {
       </details>
 
       {/* Job Safety Analysis Log - the risk matrix table */}
-      <details className="bg-white border border-line rounded-md mb-5">
-        <summary className="cursor-pointer px-4 md:px-5 py-3 font-display text-[15px] font-semibold text-navy list-none">Job Safety Analysis Log</summary>
+      <details className="bg-white border border-line rounded-md border-t-4 border-t-gold mb-5">
+        <summary className="cursor-pointer px-4 md:px-5 py-3 font-display text-[15px] font-semibold text-navy list-none flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-gold flex-shrink-0"></span>Job Safety Analysis Log</summary>
         <div className="px-4 md:px-5 pb-4 md:pb-5">
         <details className="mb-3 text-[11px]">
           <summary className="text-gold cursor-pointer font-medium">💡 Hazard identification reference (internal, not in report)</summary>
@@ -581,8 +581,8 @@ export default function JSAEditor({ jsaId, organizationId, onExit }) {
       </details>
 
       {/* Team Member Acknowledgement - open-ended signatures */}
-      <details className="bg-white border border-line rounded-md mb-5">
-        <summary className="cursor-pointer px-4 md:px-5 py-3 font-display text-[15px] font-semibold text-navy list-none">Team Member Acknowledgement</summary>
+      <details className="bg-white border border-line rounded-md border-t-4 border-t-conform mb-5">
+        <summary className="cursor-pointer px-4 md:px-5 py-3 font-display text-[15px] font-semibold text-navy list-none flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-conform flex-shrink-0"></span>Team Member Acknowledgement</summary>
         <div className="px-4 md:px-5 pb-4 md:pb-5">
         <div className="text-[11px] text-inksoft mb-4">
           Each team member confirms they have understood this Job Safety Analysis.
@@ -621,8 +621,8 @@ export default function JSAEditor({ jsaId, organizationId, onExit }) {
       </details>
 
       {/* Supervisor Acknowledgements */}
-      <details className="bg-white border border-line rounded-md mb-5">
-        <summary className="cursor-pointer px-4 md:px-5 py-3 font-display text-[15px] font-semibold text-navy list-none">Supervisor Acknowledgement</summary>
+      <details className="bg-white border border-line rounded-md border-t-4 border-t-navy2 mb-5">
+        <summary className="cursor-pointer px-4 md:px-5 py-3 font-display text-[15px] font-semibold text-navy list-none flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-navy2 flex-shrink-0"></span>Supervisor Acknowledgement</summary>
         <div className="px-4 md:px-5 pb-4 md:pb-5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[
@@ -658,8 +658,8 @@ export default function JSAEditor({ jsaId, organizationId, onExit }) {
 
       {/* Daily Review, for multi-shift JSAs */}
       {isMultiDay && (
-        <details className="bg-white border border-line rounded-md">
-          <summary className="cursor-pointer px-4 md:px-5 py-3 font-display text-[15px] font-semibold text-navy list-none">Daily Review (multi-shift use, {validityDays} days)</summary>
+        <details className="bg-white border border-line rounded-md border-t-4 border-t-minor">
+        <summary className="cursor-pointer px-4 md:px-5 py-3 font-display text-[15px] font-semibold text-navy list-none flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-minor flex-shrink-0"></span>Daily Review (multi-shift use, {validityDays} days)</summary>
           <div className="px-4 md:px-5 pb-4 md:pb-5">
           <div className="text-[11px] text-inksoft mb-4">
             This JSA is valid for more than one shift. Worksheet must be reviewed daily by all members of the work group, confirming their understanding by signing.
