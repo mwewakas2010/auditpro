@@ -59,11 +59,17 @@ export async function loadFLRA(id) {
 
   const { data: hazardReportRows, error: hrErr } = await supabase.from('flra_hazard_reports').select('*').eq('flra_id', id).order('created_at')
   if (hrErr) throw hrErr
-  const hazardReports = hazardReportRows.map((r) => r.hazard_text)
+  const hazardReports = hazardReportRows.map((r) => ({
+    id: r.id, text: r.hazard_text, dueDate: r.due_date || '', responsiblePerson: r.responsible_person || '',
+    resolved: r.resolved, status: r.resolved ? 'closed' : (r.due_date && r.due_date < new Date().toISOString().slice(0, 10) ? 'overdue' : 'pending'),
+  }))
 
   const { data: nearMissRows, error: nmErr } = await supabase.from('flra_near_miss_reports').select('*').eq('flra_id', id).order('created_at')
   if (nmErr) throw nmErr
-  const nearMissReports = nearMissRows.map((r) => r.description)
+  const nearMissReports = nearMissRows.map((r) => ({
+    id: r.id, text: r.description, dueDate: r.due_date || '', responsiblePerson: r.responsible_person || '',
+    resolved: r.resolved, status: r.resolved ? 'closed' : (r.due_date && r.due_date < new Date().toISOString().slice(0, 10) ? 'overdue' : 'pending'),
+  }))
 
   return { instance, company, hazardRows, safetyChecks, riskControls, signoffs, hazardReports, nearMissReports }
 }
@@ -142,23 +148,41 @@ export async function saveFLRA({ flraId, organizationId, companyId, meta, hazard
     if (error) throw error
   }
 
-  // Hazard reports and near-miss reports: simplest correct approach for
-  // small, fully-replaced lists - delete and reinsert
-  await supabase.from('flra_hazard_reports').delete().eq('flra_id', id)
-  const hazardReportsToInsert = (hazardReports || []).filter((h) => h && h.trim()).map((h) => ({ flra_id: id, hazard_text: h }))
-  if (hazardReportsToInsert.length) {
-    const { error } = await supabase.from('flra_hazard_reports').insert(hazardReportsToInsert)
-    if (error) throw error
-  }
-
-  await supabase.from('flra_near_miss_reports').delete().eq('flra_id', id)
-  const nearMissToInsert = (nearMissReports || []).filter((n) => n && n.trim()).map((n) => ({ flra_id: id, description: n }))
-  if (nearMissToInsert.length) {
-    const { error } = await supabase.from('flra_near_miss_reports').insert(nearMissToInsert)
-    if (error) throw error
-  }
+  // Hazard reports and near-miss reports: diff-based save, NOT blind
+  // delete+reinsert - that would silently wipe resolved/resolved_at on
+  // every save. Existing entries (have an id) get updated in place;
+  // removed entries get deleted; new entries get inserted.
+  await syncReportList(supabase, 'flra_hazard_reports', id, hazardReports, (h) => ({
+    hazard_text: h.text, due_date: h.dueDate || null, responsible_person: h.responsiblePerson || null,
+  }))
+  await syncReportList(supabase, 'flra_near_miss_reports', id, nearMissReports, (n) => ({
+    description: n.text, due_date: n.dueDate || null, responsible_person: n.responsiblePerson || null,
+  }))
 
   return id
+}
+
+async function syncReportList(supabase, table, flraId, entries, toFields) {
+  const { data: existingRows } = await supabase.from(table).select('id').eq('flra_id', flraId)
+  const existingIds = new Set((existingRows || []).map((r) => r.id))
+  const currentIds = new Set((entries || []).filter((e) => e.id).map((e) => e.id))
+
+  const idsToDelete = [...existingIds].filter((eid) => !currentIds.has(eid))
+  if (idsToDelete.length) {
+    await supabase.from(table).delete().in('id', idsToDelete)
+  }
+
+  for (const entry of entries || []) {
+    if (!entry || !entry.text || !entry.text.trim()) continue
+    const fields = toFields(entry)
+    if (entry.id) {
+      const { error } = await supabase.from(table).update(fields).eq('id', entry.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabase.from(table).insert({ flra_id: flraId, ...fields })
+      if (error) throw error
+    }
+  }
 }
 
 // Pushes every locally-queued (offline-created/edited) FLRA up to Supabase.

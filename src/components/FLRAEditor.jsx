@@ -4,6 +4,7 @@ import { listCompanies } from '../lib/companyRepo'
 import { saveLocalFLRA, getLocalFLRA, deleteLocalFLRA } from '../lib/offlineStore'
 import { useOnlineStatus } from '../lib/useOnlineStatus'
 import { signFLRA, loadFLRASignoffs, getSavedSignature, saveSignatureForReuse } from '../lib/signatureRepo'
+import { resolveHazardReport, resolveNearMissReport } from '../lib/analyticsRepo'
 import { SAFETY_CHECK_ITEMS, FATAL_RISK_CONTROLS, FLRA_INSTRUCTIONS, HIERARCHY_OF_CONTROLS } from '../data/flraContent'
 import { generateFLRAPdf } from '../utils/flraPdfExport'
 import HazardIcon from './HazardIcon.jsx'
@@ -27,6 +28,19 @@ function emptyMeta() {
 
 function emptyHazardRows() {
   return Array.from({ length: 6 }, () => ({ hazardText: '', controlText: '' }))
+}
+
+function FLRAStatusBadge({ status }) {
+  const style = {
+    closed: { bg: '#DCEDE3', text: '#2F6E4E', label: 'Closed' },
+    overdue: { bg: '#F3CFC7', text: '#A83A2C', label: 'Overdue' },
+    pending: { bg: '#F7EAC9', text: '#96690F', label: 'Pending' },
+  }[status] || { bg: '#F2EFE7', text: '#5B5F66', label: status }
+  return (
+    <span className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap" style={{ background: style.bg, color: style.text }}>
+      {style.label}
+    </span>
+  )
 }
 
 export default function FLRAEditor({ flraId, organizationId, initialCompanyId, initialAcknowledgedAt, onExit }) {
@@ -234,6 +248,16 @@ export default function FLRAEditor({ flraId, organizationId, initialCompanyId, i
       if (localId !== savedId) { await deleteLocalFLRA(localId); setLocalId(savedId) }
       setId(savedId)
       setMeta(newMeta)
+
+      // Refresh hazard/near-miss lists so newly-saved entries pick up
+      // their real database IDs - without this, "Mark Resolved" never
+      // shows up, since it needs an ID to act on.
+      try {
+        const refreshed = await loadFLRA(savedId)
+        setHazardReports(refreshed.hazardReports || [])
+        setNearMissReports(refreshed.nearMissReports || [])
+      } catch { /* non-fatal - the save itself already succeeded */ }
+
       await saveLocalFLRA(savedId, { instance: { meta: newMeta, companyId, organizationId, acknowledgedAt }, hazardRows, safetyChecks, riskControls, hazardReports, nearMissReports, pendingSync: false })
       setSaveMsg('Saved ' + new Date().toLocaleTimeString())
       setOfflineLoaded(false)
@@ -632,19 +656,54 @@ export default function FLRAEditor({ flraId, organizationId, initialCompanyId, i
             ))}
           </div>
           {hazardObserved === 'yes' && (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2.5">
               {hazardReports.map((h, i) => (
-                <div key={i} className="flex gap-2">
-                  <input
-                    className={inputCls}
+                <div key={i} className="border border-line rounded-md p-3">
+                  <div className="flex justify-between items-start mb-2">
+                    <label className="block text-[10px] font-semibold text-navy2 uppercase">Hazard {i + 1}</label>
+                    <div className="flex items-center gap-2">
+                      {h.status && <FLRAStatusBadge status={h.status} />}
+                      <button onClick={() => setHazardReports((rows) => rows.filter((_, idx) => idx !== i))} className="text-xs text-major">✕</button>
+                    </div>
+                  </div>
+                  <textarea
+                    className={`${inputCls} mb-2`}
+                    rows={2}
                     placeholder="Describe the hazard observed"
-                    value={h}
-                    onChange={(e) => setHazardReports((rows) => rows.map((r, idx) => (idx === i ? e.target.value : r)))}
+                    value={h.text}
+                    onChange={(e) => setHazardReports((rows) => rows.map((r, idx) => (idx === i ? { ...r, text: e.target.value } : r)))}
                   />
-                  <button onClick={() => setHazardReports((rows) => rows.filter((_, idx) => idx !== i))} className="text-xs text-major px-2">✕</button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                    <div>
+                      <label className="block text-[9.5px] text-inksoft uppercase mb-1">Responsible Person</label>
+                      <input
+                        className={inputCls}
+                        placeholder="Who will resolve this"
+                        value={h.responsiblePerson || ''}
+                        onChange={(e) => setHazardReports((rows) => rows.map((r, idx) => (idx === i ? { ...r, responsiblePerson: e.target.value } : r)))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9.5px] text-inksoft uppercase mb-1">Expected Resolution Date</label>
+                      <input
+                        type="date"
+                        className={inputCls}
+                        value={h.dueDate || ''}
+                        onChange={(e) => setHazardReports((rows) => rows.map((r, idx) => (idx === i ? { ...r, dueDate: e.target.value } : r)))}
+                      />
+                    </div>
+                  </div>
+                  {h.id && !h.resolved && (
+                    <button
+                      onClick={async () => { await resolveHazardReport(h.id); setHazardReports((rows) => rows.map((r, idx) => (idx === i ? { ...r, resolved: true, status: 'closed' } : r))) }}
+                      className="text-[11px] text-conform border border-conform/40 px-2.5 py-1 rounded"
+                    >
+                      Mark Resolved
+                    </button>
+                  )}
                 </div>
               ))}
-              <button onClick={() => setHazardReports((rows) => [...rows, ''])} className="text-xs text-navy2 underline self-start">
+              <button onClick={() => setHazardReports((rows) => [...rows, { text: '', dueDate: '', responsiblePerson: '' }])} className="text-xs text-navy2 underline self-start">
                 + Add another hazard
               </button>
             </div>
@@ -665,19 +724,54 @@ export default function FLRAEditor({ flraId, organizationId, initialCompanyId, i
             ))}
           </div>
           {nearMissObserved === 'yes' && (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2.5">
               {nearMissReports.map((n, i) => (
-                <div key={i} className="flex gap-2">
-                  <input
-                    className={inputCls}
+                <div key={i} className="border border-line rounded-md p-3">
+                  <div className="flex justify-between items-start mb-2">
+                    <label className="block text-[10px] font-semibold text-navy2 uppercase">Near Miss {i + 1}</label>
+                    <div className="flex items-center gap-2">
+                      {n.status && <FLRAStatusBadge status={n.status} />}
+                      <button onClick={() => setNearMissReports((rows) => rows.filter((_, idx) => idx !== i))} className="text-xs text-major">✕</button>
+                    </div>
+                  </div>
+                  <textarea
+                    className={`${inputCls} mb-2`}
+                    rows={2}
                     placeholder="Describe the near miss"
-                    value={n}
-                    onChange={(e) => setNearMissReports((rows) => rows.map((r, idx) => (idx === i ? e.target.value : r)))}
+                    value={n.text}
+                    onChange={(e) => setNearMissReports((rows) => rows.map((r, idx) => (idx === i ? { ...r, text: e.target.value } : r)))}
                   />
-                  <button onClick={() => setNearMissReports((rows) => rows.filter((_, idx) => idx !== i))} className="text-xs text-major px-2">✕</button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                    <div>
+                      <label className="block text-[9.5px] text-inksoft uppercase mb-1">Responsible Person</label>
+                      <input
+                        className={inputCls}
+                        placeholder="Who will resolve this"
+                        value={n.responsiblePerson || ''}
+                        onChange={(e) => setNearMissReports((rows) => rows.map((r, idx) => (idx === i ? { ...r, responsiblePerson: e.target.value } : r)))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9.5px] text-inksoft uppercase mb-1">Expected Resolution Date</label>
+                      <input
+                        type="date"
+                        className={inputCls}
+                        value={n.dueDate || ''}
+                        onChange={(e) => setNearMissReports((rows) => rows.map((r, idx) => (idx === i ? { ...r, dueDate: e.target.value } : r)))}
+                      />
+                    </div>
+                  </div>
+                  {n.id && !n.resolved && (
+                    <button
+                      onClick={async () => { await resolveNearMissReport(n.id); setNearMissReports((rows) => rows.map((r, idx) => (idx === i ? { ...r, resolved: true, status: 'closed' } : r))) }}
+                      className="text-[11px] text-conform border border-conform/40 px-2.5 py-1 rounded"
+                    >
+                      Mark Resolved
+                    </button>
+                  )}
                 </div>
               ))}
-              <button onClick={() => setNearMissReports((rows) => [...rows, ''])} className="text-xs text-navy2 underline self-start">
+              <button onClick={() => setNearMissReports((rows) => [...rows, { text: '', dueDate: '', responsiblePerson: '' }])} className="text-xs text-navy2 underline self-start">
                 + Add another near miss
               </button>
             </div>

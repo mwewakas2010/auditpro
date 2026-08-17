@@ -36,7 +36,6 @@ const APP_NAV = [
   { key: 'ccvs', label: 'Critical Controls', icon: ShieldCheck },
   { key: 'flras', label: 'FLRAs', icon: ClipboardCheck },
   { key: 'jsas', label: 'JSAs', icon: FileSpreadsheet },
-  { key: 'companies', label: 'Manage Companies', icon: Building2 },
 ]
 
 const AUDIT_TAB_MOBILE = {
@@ -182,6 +181,14 @@ export default function Shell() {
               <item.icon size={15} /> {item.label}
             </div>
           ))}
+          <div
+            onClick={() => goToSection('companies')}
+            className={`px-[22px] py-[9px] mt-1.5 pt-2.5 border-t border-white/10 text-[11.5px] cursor-pointer flex items-center gap-2 transition-colors ${
+              section === 'companies' ? 'text-white' : 'text-[#7E8CA3] hover:text-[#C7CEDA]'
+            }`}
+          >
+            <Building2 size={13} /> Manage Companies
+          </div>
         </div>
 
         {section === 'editor' && (

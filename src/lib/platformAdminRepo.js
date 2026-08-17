@@ -16,6 +16,12 @@ export async function listAllOrganizations() {
   return data
 }
 
+export async function createOrganization(orgName, planTier = 'starter', subscriptionStatus = 'trialing') {
+  const { data, error } = await supabase.rpc('platform_create_organization', { org_name: orgName, initial_plan_tier: planTier, initial_subscription_status: subscriptionStatus })
+  if (error) throw error
+  return data // new org id
+}
+
 export async function getBillingSummary() {
   const { data, error } = await supabase.rpc('platform_billing_summary')
   if (error) throw error

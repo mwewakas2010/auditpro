@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import { uploadDataUrl } from '../lib/auditRepo'
 import {
-  listAllOrganizations, getBillingSummary,
+  listAllOrganizations, createOrganization, getBillingSummary,
   listPlatformAdmins, addPlatformAdmin, removePlatformAdmin,
   addExistingUserToOrg, inviteUserByEmail,
   setOrgModules, setOrgSuspended, updateOrgBilling,
@@ -109,9 +110,90 @@ export default function PlatformDashboard() {
 
 function OrganizationsTab({ orgs, onRefresh }) {
   const [expandedId, setExpandedId] = useState(null)
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [newOrgName, setNewOrgName] = useState('')
+  const [newOrgPlan, setNewOrgPlan] = useState('starter')
+  const [newOrgStatus, setNewOrgStatus] = useState('trialing')
+  const [logoPreview, setLogoPreview] = useState(null)
+  const [logoFile, setLogoFile] = useState(null)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
+
+  const handleLogoChange = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setLogoFile(file)
+    const reader = new FileReader()
+    reader.onload = () => setLogoPreview(reader.result)
+    reader.readAsDataURL(file)
+  }
+
+  const handleCreate = async () => {
+    setCreateError('')
+    setCreating(true)
+    try {
+      let logoUrl = null
+      if (logoFile && logoPreview) {
+        const path = `org-logos/${Date.now()}_${logoFile.name}`
+        logoUrl = await uploadDataUrl('logos', path, logoPreview)
+      }
+      const newOrgId = await createOrganization(newOrgName, newOrgPlan, newOrgStatus, logoUrl)
+      setNewOrgName('')
+      setNewOrgPlan('starter')
+      setNewOrgStatus('trialing')
+      setLogoFile(null)
+      setLogoPreview(null)
+      setShowCreateForm(false)
+      await onRefresh()
+      setExpandedId(newOrgId) // jump straight to it so the first user can be added
+    } catch (err) {
+      setCreateError(err.message)
+    }
+    setCreating(false)
+  }
+
+  const inputCls = 'px-2.5 py-1.5 border border-line rounded text-xs'
 
   return (
     <div className="flex flex-col gap-2.5">
+      <div className="flex justify-end">
+        <button onClick={() => setShowCreateForm(!showCreateForm)} className="text-xs bg-navy text-white px-3 py-1.5 rounded">
+          {showCreateForm ? 'Cancel' : '+ New Organization'}
+        </button>
+      </div>
+
+      {showCreateForm && (
+        <div className="bg-white border border-line rounded-md p-4">
+          <div className="text-[11px] font-semibold text-navy2 uppercase tracking-wide mb-2">Create Organization</div>
+          {createError && <div className="text-xs text-major bg-majorbg border border-major rounded p-2 mb-2">{createError}</div>}
+          <div className="flex flex-col gap-2 max-w-sm">
+            <input className={inputCls} placeholder="Organization name" value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} />
+            <div className="flex gap-2">
+              <select className={inputCls} value={newOrgPlan} onChange={(e) => setNewOrgPlan(e.target.value)}>
+                <option value="starter">Starter</option>
+                <option value="growth">Growth</option>
+                <option value="pro">Pro</option>
+              </select>
+              <select className={inputCls} value={newOrgStatus} onChange={(e) => setNewOrgStatus(e.target.value)}>
+                <option value="trialing">Trialing (14-day trial)</option>
+                <option value="active">Active</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-navy2 uppercase mb-1">Logo (optional)</label>
+              <div className="flex items-center gap-2">
+                {logoPreview && <img src={logoPreview} alt="" className="h-8 w-8 object-contain border border-line rounded" />}
+                <input type="file" accept="image/*" onChange={handleLogoChange} className="text-[10px]" />
+              </div>
+            </div>
+            <button disabled={creating || !newOrgName.trim()} onClick={handleCreate} className="text-xs bg-navy text-white px-3 py-1.5 rounded disabled:opacity-50 self-start">
+              {creating ? 'Creating…' : 'Create Organization'}
+            </button>
+            <div className="text-[10px] text-inksoft">You won't be added as a member — add the client's first user below once it's created.</div>
+          </div>
+        </div>
+      )}
+
       {orgs.map((org) => (
         <div key={org.id} className="bg-white border border-line rounded-md overflow-hidden">
           <div

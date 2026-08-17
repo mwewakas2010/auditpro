@@ -102,6 +102,12 @@ export async function getUnresolvedNearMissReports(scopeMode = 'own', orgId = nu
   return data
 }
 
+export async function getModuleStatusCounts(scopeMode = 'own', orgId = null, overdueThresholdDays = 14) {
+  const { data, error } = await supabase.rpc('analytics_module_status_counts', { scope_mode: scopeMode, target_org_id: orgId, overdue_threshold_days: overdueThresholdDays })
+  if (error) throw error
+  return data
+}
+
 export async function getSafetyCultureScore(scopeMode = 'own', orgId = null, daysBack = 90) {
   const { data, error } = await supabase.rpc('analytics_safety_culture_score', { scope_mode: scopeMode, target_org_id: orgId, days_back: daysBack })
   if (error) throw error

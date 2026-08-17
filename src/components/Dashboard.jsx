@@ -5,7 +5,7 @@ import {
   getHazardNearMissCounts, getControlHierarchyUsage, getTimeToClose,
   getDailyObservationTrend, getDailyReviewCompletion, getHazardClosureRate,
   getUnresolvedHazardReports, getUnresolvedNearMissReports,
-  getSafetyCultureScore,
+  getSafetyCultureScore, getModuleStatusCounts,
   resolveHazardReport, resolveNearMissReport,
 } from '../lib/analyticsRepo'
 import { isPlatformAdmin, listAllOrganizations } from '../lib/platformAdminRepo'
@@ -38,6 +38,53 @@ function VerticalBarChart({ data, height = 140, colorFor }) {
   )
 }
 
+function StackedVerticalBarChart({ data, height = 160, seriesA = 'a', seriesB = 'b', colorA = '#16253D', colorB = '#B8862B', labelA = 'A', labelB = 'B' }) {
+  if (!data.length) return <div className="text-xs text-inksoft italic">No data yet.</div>
+  const totals = data.map((d) => Number(d[seriesA]) + Number(d[seriesB]))
+  const max = Math.max(...totals, 1)
+  const barW = 34
+  const gap = 14
+  const width = data.length * (barW + gap)
+  const MIN_TEXT_H = 14
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${Math.max(width, 100)} ${height + 26}`} width="100%" style={{ maxWidth: width + 20 }}>
+        {data.map((d, i) => {
+          const x = i * (barW + gap)
+          const aVal = Number(d[seriesA])
+          const bVal = Number(d[seriesB])
+          const aH = Math.max(aVal > 0 ? 2 : 0, (aVal / max) * height)
+          const bH = Math.max(bVal > 0 ? 2 : 0, (bVal / max) * height)
+          const total = aVal + bVal
+          return (
+            <g key={d.label}>
+              <rect x={x} y={height - aH - bH} width={barW} height={bH} fill={colorB} rx="2">
+                <title>{`${d.label} — ${labelB}: ${bVal}`}</title>
+              </rect>
+              {bH >= MIN_TEXT_H && (
+                <text x={x + barW / 2} y={height - aH - bH / 2 + 3.5} textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#FFFFFF">{bVal}</text>
+              )}
+              <rect x={x} y={height - aH} width={barW} height={aH} fill={colorA} rx="2">
+                <title>{`${d.label} — ${labelA}: ${aVal}`}</title>
+              </rect>
+              {aH >= MIN_TEXT_H && (
+                <text x={x + barW / 2} y={height - aH / 2 + 3.5} textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#FFFFFF">{aVal}</text>
+              )}
+              <text x={x + barW / 2} y={height - aH - bH - 5} textAnchor="middle" fontSize="10" fontWeight="600" fill="#16253D">{total > 0 ? total : ''}</text>
+              <text x={x + barW / 2} y={height + 13} textAnchor="middle" fontSize="9" fill="#5B5F66">{d.label.length > 9 ? d.label.slice(0, 8) + '…' : d.label}</text>
+            </g>
+          )
+        })}
+      </svg>
+      <div className="flex items-center gap-3 mt-1 text-[10px] text-inksoft">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: colorA }} /> {labelA}</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: colorB }} /> {labelB}</span>
+      </div>
+    </div>
+  )
+}
+
 function HorizontalBarChart({ data, width = 480, barHeight = 22, gap = 8, colorFor }) {
   if (!data.length) return <div className="text-xs text-inksoft italic">No data yet.</div>
   const max = Math.max(...data.map((d) => d.value), 1)
@@ -66,25 +113,53 @@ function DonutChart({ data, size = 130, strokeWidth = 22 }) {
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
   let offset = 0
+
+  const cx = size / 2
+  const cy = size / 2
+  const tickRadiusOuter = radius + strokeWidth / 2 + 6
+  const tickRadiusInner = radius + strokeWidth / 2 + 2
+  const labelRadius = radius + strokeWidth / 2 + 15
+  // 0% and 100% both sit at the 12 o'clock start/end point of the ring.
+  const graduations = [0, 25, 50, 75, 100]
+  const angleFor = (pct) => (pct / 100) * 360 - 90 // -90 so 0% starts at the top
+  const polar = (angleDeg, r) => {
+    const rad = (angleDeg * Math.PI) / 180
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
+  }
+
   return (
     <div className="flex items-center justify-center gap-6 w-full">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0">
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#F2EFE7" strokeWidth={strokeWidth} />
-        {total > 0 && (
-          <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
-            {data.filter((d) => d.value > 0).map((d, i) => {
-              const frac = d.value / total
-              const dash = frac * circumference
-              const el = (
-                <circle key={i} cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={d.color} strokeWidth={strokeWidth}
-                  strokeDasharray={`${dash} ${circumference - dash}`} strokeDashoffset={-offset} />
-              )
-              offset += dash
-              return el
-            })}
-          </g>
-        )}
-        <text x={size / 2} y={size / 2 + 5} textAnchor="middle" fontSize="19" fontWeight="700" fill="#16253D">{total}</text>
+      <svg width={size + 34} height={size + 34} viewBox={`0 0 ${size + 34} ${size + 34}`} className="flex-shrink-0">
+        <g transform={`translate(17, 17)`}>
+          {graduations.map((pct) => {
+            const angle = angleFor(pct)
+            const inner = polar(angle, tickRadiusInner)
+            const outer = polar(angle, tickRadiusOuter)
+            const label = polar(angle, labelRadius)
+            return (
+              <g key={pct}>
+                <line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke="#C9C2B0" strokeWidth="1.5" />
+                <text x={label.x} y={label.y + 3} textAnchor="middle" fontSize="8" fill="#8A8368">{pct === 0 || pct === 100 ? (pct === 0 ? '0%' : '') : `${pct}%`}</text>
+              </g>
+            )
+          })}
+          <circle cx={cx} cy={cy} r={radius} fill="none" stroke="#F2EFE7" strokeWidth={strokeWidth} />
+          {total > 0 && (
+            <g transform={`rotate(-90 ${cx} ${cy})`}>
+              {data.filter((d) => d.value > 0).map((d, i) => {
+                const frac = d.value / total
+                const dash = frac * circumference
+                const el = (
+                  <circle key={i} cx={cx} cy={cy} r={radius} fill="none" stroke={d.color} strokeWidth={strokeWidth}
+                    strokeDasharray={`${dash} ${circumference - dash}`} strokeDashoffset={-offset} />
+                )
+                offset += dash
+                return el
+              })}
+            </g>
+          )}
+          <text x={cx} y={cy + 5} textAnchor="middle" fontSize="19" fontWeight="700" fill="#16253D">{total}</text>
+        </g>
       </svg>
       <div className="flex flex-col gap-1.5">
         {data.map((d, i) => (
@@ -137,11 +212,24 @@ function GaugeChart({ culture, size = 280 }) {
   const availableComponents = culture ? CULTURE_COMPONENTS.filter((c) => culture[c.key] != null) : []
 
   return (
-    <div className="flex flex-col items-center flex-shrink-0" style={{ width: size }}>
-      <svg viewBox={`0 0 ${size} ${cy + 34}`} width="100%" style={{ maxWidth: size }}>
+    <div className="flex flex-col items-center flex-shrink-0" style={{ width: size + 48 }}>
+      <svg viewBox={`-24 0 ${size + 48} ${cy + 34}`} width="100%" style={{ maxWidth: size + 48 }}>
         <path d={arcPath(180, 120, radius)} stroke="#A83A2C" strokeWidth={strokeW} fill="none" strokeLinecap="round" />
         <path d={arcPath(120, 60, radius)} stroke="#C08A1E" strokeWidth={strokeW} fill="none" />
         <path d={arcPath(60, 0, radius)} stroke="#2F6E4E" strokeWidth={strokeW} fill="none" strokeLinecap="round" />
+
+        {[0, 20, 40, 60, 80, 100].map((pct) => {
+          const angle = scoreAngle(pct)
+          const inner = polar(angle, radius + strokeW / 2 + 4)
+          const outer = polar(angle, radius + strokeW / 2 + 10)
+          const label = polar(angle, radius + strokeW / 2 + 21)
+          return (
+            <g key={pct}>
+              <line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke="#8A8368" strokeWidth="1.5" />
+              <text x={label.x} y={label.y + 3} textAnchor="middle" fontSize="9" fontWeight="600" fill="#5B5F66">{pct}%</text>
+            </g>
+          )
+        })}
 
         {availableComponents.map((c) => {
           const angle = scoreAngle(Number(culture[c.key]))
@@ -354,6 +442,19 @@ function TrendArrow({ current, previous, higherIsBetter = true }) {
   )
 }
 
+function StatusBadge({ status }) {
+  const style = {
+    closed: { bg: '#DCEDE3', text: '#2F6E4E', label: 'Closed' },
+    overdue: { bg: '#F3CFC7', text: '#A83A2C', label: 'Overdue' },
+    pending: { bg: '#F7EAC9', text: '#96690F', label: 'Pending' },
+  }[status] || { bg: '#F2EFE7', text: '#5B5F66', label: status }
+  return (
+    <span className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap" style={{ background: style.bg, color: style.text }}>
+      {style.label}
+    </span>
+  )
+}
+
 function StatCard({ label, value, sub, trend }) {
   return (
     <div className="bg-white border border-line rounded-md p-3">
@@ -414,6 +515,9 @@ export default function Dashboard() {
   })
   const [trendRangeDays, setTrendRangeDays] = useState(30)
   const [safetyCulture, setSafetyCulture] = useState(null)
+  const [perOrgCulture, setPerOrgCulture] = useState([])
+  const [moduleStatusCounts, setModuleStatusCounts] = useState([])
+  const [overdueThreshold, setOverdueThreshold] = useState(14)
   const [dailyReviewCompletion, setDailyReviewCompletion] = useState(null)
   const [dailyReviewCompletionPrev, setDailyReviewCompletionPrev] = useState(null)
   const [hazardClosure, setHazardClosure] = useState([])
@@ -484,6 +588,27 @@ export default function Dashboard() {
     getSafetyCultureScore(scopeMode, orgId, 90).then(setSafetyCulture).catch(() => {})
   }, [scopeMode, orgFilter])
 
+  useEffect(() => {
+    const orgId = scopeMode === 'platform' ? (orgFilter || null) : null
+    getModuleStatusCounts(scopeMode, orgId, overdueThreshold).then(setModuleStatusCounts).catch(() => {})
+  }, [scopeMode, orgFilter, overdueThreshold])
+
+  useEffect(() => {
+    // Per-organization mini gauges - only meaningful in platform-wide view
+    // with no single org selected (otherwise the main gauge already covers it).
+    if (scopeMode !== 'platform' || orgFilter || !orgs.length) {
+      setPerOrgCulture([])
+      return
+    }
+    Promise.all(
+      orgs.map((o) =>
+        getSafetyCultureScore('platform', o.id, 90)
+          .then((culture) => ({ orgId: o.id, orgName: o.name, culture }))
+          .catch(() => ({ orgId: o.id, orgName: o.name, culture: null }))
+      )
+    ).then(setPerOrgCulture)
+  }, [scopeMode, orgFilter, orgs])
+
   const refreshClosure = () => {
     const orgId = scopeMode === 'platform' ? (orgFilter || null) : null
     getHazardClosureRate(scopeMode, orgId).then(setHazardClosure)
@@ -547,6 +672,25 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {perOrgCulture.length > 0 && (
+        <div className="bg-white border border-line rounded-md p-4 mb-2">
+          <div className="font-display text-sm font-semibold text-navy mb-1">Safety Culture by Organization</div>
+          <div className="text-[10.5px] text-inksoft mb-3">Same fixed 90-day composite score, broken out per organization. Click one to drill in.</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {perOrgCulture.map((p) => (
+              <div
+                key={p.orgId}
+                onClick={() => setOrgFilter(p.orgId)}
+                className="border border-line rounded-md p-2.5 flex flex-col items-center cursor-pointer hover:border-navy2"
+              >
+                <div className="text-[11px] font-medium text-navy text-center mb-1 truncate w-full">{p.orgName}</div>
+                <GaugeChart culture={p.culture} size={130} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <SectionHeader title="Leading Indicators" borderColor="#2F6E4E" />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
@@ -607,6 +751,51 @@ export default function Dashboard() {
 
       <SectionHeader title="Lagging Indicators" borderColor="#A83A2C" />
 
+      <div className="bg-white border border-line rounded-md p-3 mb-3">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
+          <div className="font-display text-[13px] font-semibold text-navy">Record Status by Module</div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-[10px] text-inksoft">Overdue threshold (days, applies to FLRA/CCV/Audit — JSA uses its real 14-day validity)</label>
+            <input
+              type="number"
+              min="1"
+              className="w-14 px-1.5 py-0.5 border border-line rounded text-[10px]"
+              value={overdueThreshold}
+              onChange={(e) => setOverdueThreshold(Math.max(1, Number(e.target.value) || 1))}
+            />
+          </div>
+        </div>
+        <table className="w-full text-[11px]">
+          <thead>
+            <tr className="border-b border-line">
+              <th className="text-left py-1.5 font-semibold text-navy2">Module</th>
+              <th className="text-center py-1.5 font-semibold text-conform">Completed</th>
+              <th className="text-center py-1.5 font-semibold text-major">Overdue</th>
+              <th className="text-center py-1.5 font-semibold" style={{ color: '#96690F' }}>In Progress</th>
+            </tr>
+          </thead>
+          <tbody>
+            {['jsa', 'flra', 'ccv', 'audit'].map((m) => {
+              const row = moduleStatusCounts.find((r) => r.module === m)
+              return (
+                <tr key={m} className="border-b border-line last:border-0">
+                  <td className="py-2 font-medium text-navy uppercase">{m}</td>
+                  <td className="text-center py-2">
+                    <span className="inline-block min-w-[28px] px-2 py-0.5 rounded font-semibold" style={{ background: '#DCEDE3', color: '#2F6E4E' }}>{row ? Number(row.completed_count) : 0}</span>
+                  </td>
+                  <td className="text-center py-2">
+                    <span className="inline-block min-w-[28px] px-2 py-0.5 rounded font-semibold" style={{ background: '#F3CFC7', color: '#A83A2C' }}>{row ? Number(row.overdue_count) : 0}</span>
+                  </td>
+                  <td className="text-center py-2">
+                    <span className="inline-block min-w-[28px] px-2 py-0.5 rounded font-semibold" style={{ background: '#F7EAC9', color: '#96690F' }}>{row ? Number(row.in_progress_count) : 0}</span>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="bg-white border border-line rounded-md p-3">
           <div className="font-display text-[13px] font-semibold text-navy mb-2">Records by Module</div>
@@ -620,7 +809,10 @@ export default function Dashboard() {
 
         <div className="bg-white border border-line rounded-md p-3">
           <div className="font-display text-[13px] font-semibold text-navy mb-2">Fatal Risk Frequency (JSA + FLRA)</div>
-          <VerticalBarChart data={fatalRiskFreq.slice(0, 8).map((r) => ({ label: r.fatal_risk, value: Number(r.total_count) }))} colorFor={() => '#16253D'} />
+          <StackedVerticalBarChart
+            data={fatalRiskFreq.slice(0, 8).map((r) => ({ label: r.fatal_risk, jsa: Number(r.jsa_count), flra: Number(r.flra_count) }))}
+            seriesA="jsa" seriesB="flra" labelA="JSA" labelB="FLRA" colorA="#16253D" colorB="#B8862B"
+          />
         </div>
 
         <div className="bg-white border border-line rounded-md p-3">
@@ -661,9 +853,12 @@ export default function Dashboard() {
               <div key={h.id} className="text-[11px] border border-line rounded p-1.5 flex justify-between items-start gap-2">
                 <div>
                   <div className="font-medium">{h.hazard_text}</div>
-                  <div className="text-inksoft mt-0.5">{h.company_name} • {new Date(h.created_at).toLocaleDateString()}</div>
+                  <div className="text-inksoft mt-0.5">{h.company_name} • Reported {new Date(h.created_at).toLocaleDateString()}{h.due_date && ` • Due ${h.due_date}`}</div>
                 </div>
-                <button onClick={() => handleResolveHazard(h.id)} className="text-[10px] text-conform border border-conform/40 px-1.5 py-0.5 rounded whitespace-nowrap">Resolve</button>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <StatusBadge status={h.status} />
+                  <button onClick={() => handleResolveHazard(h.id)} className="text-[10px] text-conform border border-conform/40 px-1.5 py-0.5 rounded whitespace-nowrap">Resolve</button>
+                </div>
               </div>
             ))}
             {!unresolvedHazards.length && <div className="text-[11px] text-inksoft italic">None outstanding.</div>}
@@ -677,9 +872,12 @@ export default function Dashboard() {
               <div key={n.id} className="text-[11px] border border-line rounded p-1.5 flex justify-between items-start gap-2">
                 <div>
                   <div className="font-medium">{n.description}</div>
-                  <div className="text-inksoft mt-0.5">{n.company_name} • {new Date(n.created_at).toLocaleDateString()}</div>
+                  <div className="text-inksoft mt-0.5">{n.company_name} • Reported {new Date(n.created_at).toLocaleDateString()}{n.due_date && ` • Due ${n.due_date}`}</div>
                 </div>
-                <button onClick={() => handleResolveNearMiss(n.id)} className="text-[10px] text-conform border border-conform/40 px-1.5 py-0.5 rounded whitespace-nowrap">Resolve</button>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <StatusBadge status={n.status} />
+                  <button onClick={() => handleResolveNearMiss(n.id)} className="text-[10px] text-conform border border-conform/40 px-1.5 py-0.5 rounded whitespace-nowrap">Resolve</button>
+                </div>
               </div>
             ))}
             {!unresolvedNearMisses.length && <div className="text-[11px] text-inksoft italic">None outstanding.</div>}
