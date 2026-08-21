@@ -13,7 +13,10 @@ import FLRAEditor from './FLRAEditor.jsx'
 import JSAList from './JSAList.jsx'
 import JSAEditor from './JSAEditor.jsx'
 import PlatformDashboard from './PlatformDashboard.jsx'
+import OrganizationDashboard from './OrganizationDashboard.jsx'
+import MyDataDashboard from './MyDataDashboard.jsx'
 import { isPlatformAdmin } from '../lib/platformAdminRepo'
+import { getMyOrganization } from '../lib/orgRepo'
 import {
   LayoutDashboard,
   ClipboardList,
@@ -46,14 +49,50 @@ const AUDIT_TAB_MOBILE = {
 }
 
 export default function Shell() {
-  const [section, setSection] = useState('dashboard') // 'dashboard' | 'audits' | 'companies' | 'editor' | 'ccvs' | 'ccv-editor' | 'flras' | 'flra-editor'
+  const [section, setSection] = useState('dashboard')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [selectedOrgForDashboard, setSelectedOrgForDashboard] = useState(null)
+  const [roleCheckDone, setRoleCheckDone] = useState(false)
+
+  const openOrgDashboard = (organizationId, organizationName) => {
+    setSelectedOrgForDashboard({ id: organizationId, name: organizationName })
+    setSection('organization-dashboard')
+  }
+  const openMyData = () => setSection('my-data-dashboard')
+
   const [auditId, setAuditId] = useState(null)
   const [auditTab, setAuditTab] = useState('setup')
   const [editorKey, setEditorKey] = useState(0)
 
+  // Role-based landing: Platform Admin sees the gauge-grid Dashboard.
+  // A regular subscriber-org member skips the grid entirely and lands
+  // directly on their own Organization Dashboard - there's only ever one
+  // org to pick for them anyway.
+  //
+  // NOTE: getMyOrganization() isn't visible in this environment right now
+  // (a sandbox reset lost access to orgRepo.js), so this assumes the same
+  // shape established earlier this session - an object with a nested
+  // `organization` containing `id`/`name`. If your actual orgRepo.js
+  // returns something differently shaped, this redirect will silently no-op
+  // (regular members will just see the Dashboard as before) rather than crash.
   useEffect(() => {
-    isPlatformAdmin().then(setIsAdmin).catch(() => {})
+    isPlatformAdmin().then((admin) => {
+      setIsAdmin(admin)
+      if (admin) {
+        setRoleCheckDone(true)
+        return
+      }
+      getMyOrganization()
+        .then((result) => {
+          const org = result?.organization || result
+          if (org?.id) {
+            setSelectedOrgForDashboard({ id: org.id, name: org.name })
+            setSection('organization-dashboard')
+          }
+        })
+        .catch(() => {})
+        .finally(() => setRoleCheckDone(true))
+    }).catch(() => setRoleCheckDone(true))
   }, [])
 
   const navItems = isAdmin ? [...APP_NAV, { key: 'platform', label: 'Platform Admin', icon: ShieldAlert }] : APP_NAV
@@ -181,11 +220,21 @@ export default function Shell() {
               <item.icon size={15} /> {item.label}
             </div>
           ))}
+          {isAdmin && (
+            <div
+              onClick={openMyData}
+              className={`px-[22px] py-[9px] mt-1.5 pt-2.5 border-t border-white/10 text-[11.5px] cursor-pointer flex items-center gap-2 transition-colors ${
+                section === 'my-data-dashboard' ? 'text-white' : 'text-[#7E8CA3] hover:text-[#C7CEDA]'
+              }`}
+            >
+              <LayoutDashboard size={13} /> My Data
+            </div>
+          )}
           <div
             onClick={() => goToSection('companies')}
-            className={`px-[22px] py-[9px] mt-1.5 pt-2.5 border-t border-white/10 text-[11.5px] cursor-pointer flex items-center gap-2 transition-colors ${
+            className={`px-[22px] py-[9px] text-[11.5px] cursor-pointer flex items-center gap-2 transition-colors ${
               section === 'companies' ? 'text-white' : 'text-[#7E8CA3] hover:text-[#C7CEDA]'
-            }`}
+            } ${!isAdmin ? 'mt-1.5 pt-2.5 border-t border-white/10' : ''}`}
           >
             <Building2 size={13} /> Manage Companies
           </div>
@@ -229,7 +278,17 @@ export default function Shell() {
 
       {/* ===== Main content ===== */}
       <div className="flex-1 min-w-0 overflow-y-auto pb-16 md:pb-0">
-        {section === 'dashboard' && <Dashboard />}
+        {section === 'dashboard' && roleCheckDone && <Dashboard onOpenOrgDashboard={openOrgDashboard} />}
+        {section === 'organization-dashboard' && selectedOrgForDashboard && (
+          <OrganizationDashboard
+            organizationId={selectedOrgForDashboard.id}
+            organizationName={selectedOrgForDashboard.name}
+            onBack={() => (isAdmin ? setSection('dashboard') : null)}
+          />
+        )}
+        {section === 'my-data-dashboard' && (
+          <MyDataDashboard onBack={() => setSection('dashboard')} />
+        )}
         {section === 'audits' && <AuditList onOpen={openAudit} onNew={newAudit} />}
         {section === 'ccvs' && <CCVList onOpen={openCCV} onNew={newCCV} />}
         {section === 'flras' && <FLRAList onOpen={openFLRA} onNew={newFLRA} />}

@@ -1,0 +1,586 @@
+import { useEffect, useState } from 'react'
+import {
+  getSafetyCultureScore, getSafetyCultureByCompany,
+  getCcvScheduleSummaryOwn, listCCVScheduleOwn, scheduleCCV,
+  getCcvByFatalRiskOwn, getFlraFatalRiskOwn, getFatalRiskFrequency,
+  getModuleCountsByCompanyOwn, getJSARiskByCompanyOwn, getFatalRiskByCompanyOwn,
+  getNcSummaryOwn, getNcListOwn, resolveNonconformity, listAuditsOwn, createNonconformity,
+} from '../lib/analyticsRepo'
+import { listTemplates } from '../lib/ccvRepo'
+import { listCompanies } from '../lib/companyRepo'
+
+const CULTURE_COMPONENTS = [
+  { key: 'hazard_closure_score', label: 'Hazard Closure', weight: 0.15, color: '#2F6E4E' },
+  { key: 'near_miss_closure_score', label: 'Near Miss Closure', weight: 0.15, color: '#4C8C6B' },
+  { key: 'hierarchy_quality_score', label: 'Control Quality', weight: 0.20, color: '#16253D' },
+  { key: 'risk_reduction_score', label: 'Risk Reduction', weight: 0.20, color: '#B8862B' },
+  { key: 'daily_review_score', label: 'Daily Reviews', weight: 0.15, color: '#6B4C9A' },
+  { key: 'ccv_compliance_score', label: 'CCV Compliance', weight: 0.15, color: '#2C6E8F' },
+]
+
+function GaugeChart({ culture, size = 280, showTicks = true }) {
+  const score = culture?.overall_score != null ? Number(culture.overall_score) : null
+  const cx = size / 2
+  const cy = size / 2 + 6
+  const radius = size / 2 - 30
+  const strokeW = Math.max(10, size * 0.093)
+
+  const polar = (angleDeg, r) => {
+    const rad = (angleDeg * Math.PI) / 180
+    return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) }
+  }
+  const arcPath = (a1, a2, r) => {
+    const p1 = polar(a1, r)
+    const p2 = polar(a2, r)
+    return `M ${p1.x} ${p1.y} A ${r} ${r} 0 0 1 ${p2.x} ${p2.y}`
+  }
+  const scoreAngle = (s) => 180 - (Math.max(0, Math.min(100, s)) / 100) * 180
+
+  const hasScore = score != null
+  const clamped = hasScore ? Math.max(0, Math.min(100, score)) : 0
+  const needleAngle = scoreAngle(clamped)
+  const needleEnd = polar(needleAngle, radius - 14)
+
+  const zoneLabel = clamped < 40 ? 'Needs Attention' : clamped < 70 ? 'Developing' : 'Strong'
+  const zoneColor = clamped < 40 ? '#A83A2C' : clamped < 70 ? '#C08A1E' : '#2F6E4E'
+
+  const availableComponents = culture ? CULTURE_COMPONENTS.filter((c) => culture[c.key] != null) : []
+  const pad = 24
+
+  return (
+    <div className="flex flex-col items-center flex-shrink-0" style={{ width: size + pad * 2 }}>
+      <svg viewBox={`-${pad} 0 ${size + pad * 2} ${cy + 34}`} width="100%" style={{ maxWidth: size + pad * 2 }}>
+        <path d={arcPath(180, 120, radius)} stroke="#A83A2C" strokeWidth={strokeW} fill="none" strokeLinecap="round" />
+        <path d={arcPath(120, 60, radius)} stroke="#C08A1E" strokeWidth={strokeW} fill="none" />
+        <path d={arcPath(60, 0, radius)} stroke="#2F6E4E" strokeWidth={strokeW} fill="none" strokeLinecap="round" />
+
+        {showTicks && [0, 20, 40, 60, 80, 100].map((pct) => {
+          const angle = scoreAngle(pct)
+          const inner = polar(angle, radius + strokeW / 2 + 4)
+          const outer = polar(angle, radius + strokeW / 2 + 10)
+          const label = polar(angle, radius + strokeW / 2 + 21)
+          return (
+            <g key={pct}>
+              <line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke="#8A8368" strokeWidth="1.5" />
+              <text x={label.x} y={label.y + 3} textAnchor="middle" fontSize={size < 180 ? 7 : 9} fontWeight="600" fill="#5B5F66">{pct}%</text>
+            </g>
+          )
+        })}
+
+        {availableComponents.map((c) => {
+          const angle = scoreAngle(Number(culture[c.key]))
+          const inner = polar(angle, radius - strokeW / 2 - 4)
+          const outer = polar(angle, radius + strokeW / 2 + 4)
+          return <line key={c.key} x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke={c.color} strokeWidth="3" strokeLinecap="round" />
+        })}
+
+        {hasScore && (
+          <>
+            <line x1={cx} y1={cy} x2={needleEnd.x} y2={needleEnd.y} stroke="#16253D" strokeWidth="4" strokeLinecap="round" />
+            <circle cx={cx} cy={cy} r="8" fill="#16253D" />
+          </>
+        )}
+        <text x={cx} y={cy + (size < 180 ? 22 : 26)} textAnchor="middle" fontSize={size < 180 ? 20 : 32} fontWeight="700" fill="#16253D">
+          {hasScore ? Math.round(score) : '—'}
+        </text>
+      </svg>
+      {hasScore && <div className={`${size < 180 ? 'text-[11px]' : 'text-sm'} font-semibold -mt-1`} style={{ color: zoneColor }}>{zoneLabel}</div>}
+      {!hasScore && <div className="text-xs text-inksoft italic -mt-1">Not enough data yet</div>}
+    </div>
+  )
+}
+
+function StatCard({ label, value, sub }) {
+  return (
+    <div className="bg-white border border-line rounded-md p-3">
+      <div className="text-[10px] text-inksoft uppercase tracking-wide font-semibold">{label}</div>
+      <div className="text-xl font-display font-bold text-navy mt-0.5">{value}</div>
+      {sub && <div className="text-[10px] text-inksoft mt-0.5">{sub}</div>}
+    </div>
+  )
+}
+
+function VerticalBarChart({ data, height = 140, color = '#16253D' }) {
+  if (!data.length) return <div className="text-xs text-inksoft italic">No data yet.</div>
+  const max = Math.max(...data.map((d) => d.value), 1)
+  const barW = 34
+  const gap = 14
+  const width = data.length * (barW + gap)
+  return (
+    <svg viewBox={`0 0 ${Math.max(width, 100)} ${height + 26}`} width="100%" style={{ maxWidth: width + 20 }}>
+      {data.map((d, i) => {
+        const x = i * (barW + gap)
+        const h = Math.max(2, (d.value / max) * height)
+        return (
+          <g key={d.label}>
+            <rect x={x} y={height - h} width={barW} height={h} fill={color} rx="3" />
+            <text x={x + barW / 2} y={height - h - 5} textAnchor="middle" fontSize="10.5" fontWeight="600" fill="#16253D">{d.value}</text>
+            <text x={x + barW / 2} y={height + 13} textAnchor="middle" fontSize="9" fill="#5B5F66">{d.label.length > 9 ? d.label.slice(0, 8) + '…' : d.label}</text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+function StackedVerticalBarChart({ data, height = 160, seriesA = 'a', seriesB = 'b', colorA = '#16253D', colorB = '#B8862B', labelA = 'A', labelB = 'B' }) {
+  if (!data.length) return <div className="text-xs text-inksoft italic">No data yet.</div>
+  const totals = data.map((d) => Number(d[seriesA]) + Number(d[seriesB]))
+  const max = Math.max(...totals, 1)
+  const barW = 34
+  const gap = 14
+  const width = data.length * (barW + gap)
+  const MIN_TEXT_H = 14
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${Math.max(width, 100)} ${height + 26}`} width="100%" style={{ maxWidth: width + 20 }}>
+        {data.map((d, i) => {
+          const x = i * (barW + gap)
+          const aVal = Number(d[seriesA])
+          const bVal = Number(d[seriesB])
+          const aH = Math.max(aVal > 0 ? 2 : 0, (aVal / max) * height)
+          const bH = Math.max(bVal > 0 ? 2 : 0, (bVal / max) * height)
+          const total = aVal + bVal
+          return (
+            <g key={d.label}>
+              <rect x={x} y={height - aH - bH} width={barW} height={bH} fill={colorB} rx="2">
+                <title>{`${d.label} — ${labelB}: ${bVal}`}</title>
+              </rect>
+              {bH >= MIN_TEXT_H && (
+                <text x={x + barW / 2} y={height - aH - bH / 2 + 3.5} textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#FFFFFF">{bVal}</text>
+              )}
+              <rect x={x} y={height - aH} width={barW} height={aH} fill={colorA} rx="2">
+                <title>{`${d.label} — ${labelA}: ${aVal}`}</title>
+              </rect>
+              {aH >= MIN_TEXT_H && (
+                <text x={x + barW / 2} y={height - aH / 2 + 3.5} textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#FFFFFF">{aVal}</text>
+              )}
+              <text x={x + barW / 2} y={height - aH - bH - 5} textAnchor="middle" fontSize="10" fontWeight="600" fill="#16253D">{total > 0 ? total : ''}</text>
+              <text x={x + barW / 2} y={height + 13} textAnchor="middle" fontSize="9" fill="#5B5F66">{d.label.length > 9 ? d.label.slice(0, 8) + '…' : d.label}</text>
+            </g>
+          )
+        })}
+      </svg>
+      <div className="flex items-center gap-3 mt-1 text-[10px] text-inksoft">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: colorA }} /> {labelA}</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: colorB }} /> {labelB}</span>
+      </div>
+    </div>
+  )
+}
+
+function ComponentBreakdownList({ culture }) {
+  const available = culture ? CULTURE_COMPONENTS.filter((c) => culture[c.key] != null) : []
+  if (!available.length) return null
+  return (
+    <div className="flex flex-col gap-2 w-full">
+      {available.map((c) => {
+        const val = Number(culture[c.key])
+        return (
+          <div key={c.key} className="flex items-center gap-2">
+            <div className="w-[110px] flex-shrink-0 text-[10.5px] text-inksoft truncate">{c.label}</div>
+            <div className="flex-1 h-2.5 rounded-full bg-[#F2EFE7] overflow-hidden">
+              <div className="h-full rounded-full" style={{ width: `${val}%`, background: c.color }} />
+            </div>
+            <div className="w-9 flex-shrink-0 text-right text-[10.5px] font-semibold text-navy">{Math.round(val)}</div>
+            <div className="w-9 flex-shrink-0 text-right text-[9px] text-inksoft">{Math.round(c.weight * 100)}%</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function CCVSchedulePanel({ onScheduled }) {
+  const [templates, setTemplates] = useState([])
+  const [companies, setCompanies] = useState([])
+  const [items, setItems] = useState([])
+  const [showForm, setShowForm] = useState(false)
+  const [templateId, setTemplateId] = useState('')
+  const [companyId, setCompanyId] = useState('')
+  const [plannedDate, setPlannedDate] = useState('')
+  const [assignedTo, setAssignedTo] = useState('')
+  const [assignedSection, setAssignedSection] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const refresh = () => {
+    listCCVScheduleOwn().then(setItems).catch(() => {})
+  }
+
+  useEffect(() => {
+    listTemplates().then(setTemplates).catch(() => {})
+    listCompanies().then(setCompanies).catch(() => {})
+    refresh()
+  }, [])
+
+  const handleSchedule = async () => {
+    setError('')
+    setSaving(true)
+    try {
+      await scheduleCCV(templateId, plannedDate, null, companyId || null, assignedTo || null, assignedSection || null)
+      setTemplateId(''); setCompanyId(''); setPlannedDate(''); setAssignedTo(''); setAssignedSection('')
+      setShowForm(false)
+      refresh()
+      onScheduled && onScheduled()
+    } catch (err) {
+      setError(err.message)
+    }
+    setSaving(false)
+  }
+
+  const inputCls = 'px-2.5 py-1.5 border border-line rounded text-xs'
+
+  return (
+    <div className="bg-white border border-line rounded-md p-3 mb-3">
+      <div className="flex justify-between items-center mb-2">
+        <div className="font-display text-[13px] font-semibold text-navy">CCV Schedule</div>
+        <button onClick={() => setShowForm(!showForm)} className="text-[10.5px] text-navy border border-navy/40 px-2 py-1 rounded">
+          {showForm ? 'Cancel' : '+ Schedule CCV'}
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="border border-line rounded p-2.5 mb-3 bg-paper/40">
+          {error && <div className="text-[10.5px] text-major bg-majorbg border border-major rounded p-1.5 mb-2">{error}</div>}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+            <select className={inputCls} value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+              <option value="">Select hazard category…</option>
+              {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <select className={inputCls} value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+              <option value="">Select company (optional)…</option>
+              {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <input type="date" className={inputCls} value={plannedDate} onChange={(e) => setPlannedDate(e.target.value)} />
+            <input className={inputCls} placeholder="Assigned to (optional)" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} />
+            <input className={inputCls} placeholder="Section (optional)" value={assignedSection} onChange={(e) => setAssignedSection(e.target.value)} />
+          </div>
+          <button disabled={saving || !templateId || !plannedDate} onClick={handleSchedule} className="text-[11px] bg-navy text-white px-3 py-1.5 rounded disabled:opacity-50">
+            {saving ? 'Scheduling…' : 'Schedule'}
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto">
+        {items.map((item) => {
+          const status = item.linked_ccv_instance_id ? 'conducted' : item.is_overdue ? 'overdue' : 'upcoming'
+          const style = { conducted: { bg: '#DCEDE3', text: '#2F6E4E' }, overdue: { bg: '#F3CFC7', text: '#A83A2C' }, upcoming: { bg: '#F7EAC9', text: '#96690F' } }[status]
+          return (
+            <div key={item.id} className="flex justify-between items-center text-[11px] border border-line rounded p-1.5">
+              <div>
+                <span className="font-medium">{item.template_name}</span>
+                <span className="text-inksoft"> • {item.planned_date}{item.assigned_to && ` • ${item.assigned_to}`}{item.assigned_section && ` • ${item.assigned_section}`}</span>
+              </div>
+              <span className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: style.bg, color: style.text }}>
+                {status === 'conducted' ? 'Conducted' : status === 'overdue' ? 'Overdue' : 'Upcoming'}
+              </span>
+            </div>
+          )
+        })}
+        {!items.length && <div className="text-xs text-inksoft italic">Nothing scheduled yet.</div>}
+      </div>
+    </div>
+  )
+}
+
+function NonConformitiesPanel() {
+  const [summary, setSummary] = useState(null)
+  const [items, setItems] = useState([])
+  const [audits, setAudits] = useState([])
+  const [showForm, setShowForm] = useState(false)
+  const [auditId, setAuditId] = useState('')
+  const [description, setDescription] = useState('')
+  const [responsiblePerson, setResponsiblePerson] = useState('')
+  const [dueDate, setDueDate] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const refresh = () => {
+    getNcSummaryOwn().then(setSummary).catch(() => {})
+    getNcListOwn(true).then(setItems).catch(() => {})
+  }
+
+  useEffect(() => {
+    listAuditsOwn().then(setAudits).catch(() => {})
+    refresh()
+  }, [])
+
+  const handleCreate = async () => {
+    setError('')
+    setSaving(true)
+    try {
+      await createNonconformity(auditId, description, responsiblePerson || null, dueDate || null)
+      setAuditId(''); setDescription(''); setResponsiblePerson(''); setDueDate('')
+      setShowForm(false)
+      refresh()
+    } catch (err) {
+      setError(err.message)
+    }
+    setSaving(false)
+  }
+
+  const handleResolve = async (ncId) => {
+    await resolveNonconformity(ncId)
+    refresh()
+  }
+
+  const inputCls = 'px-2.5 py-1.5 border border-line rounded text-xs'
+
+  return (
+    <div className="bg-white border border-line rounded-md p-3 mb-3">
+      <div className="flex justify-between items-center mb-2">
+        <div className="font-display text-[13px] font-semibold text-navy">Non-Conformities</div>
+        <button onClick={() => setShowForm(!showForm)} className="text-[10.5px] text-navy border border-navy/40 px-2 py-1 rounded">
+          {showForm ? 'Cancel' : '+ Add Non-Conformity'}
+        </button>
+      </div>
+
+      {summary && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
+          <StatCard label="Total" value={summary.total_count ?? '—'} />
+          <StatCard label="Closed" value={summary.closed_count ?? '—'} />
+          <StatCard label="Pending" value={summary.pending_count ?? '—'} />
+          <StatCard label="Due Soon" value={summary.upcoming_count ?? '—'} />
+          <StatCard label="Overdue" value={summary.overdue_count ?? '—'} />
+        </div>
+      )}
+
+      {showForm && (
+        <div className="border border-line rounded p-2.5 mb-3 bg-paper/40">
+          {error && <div className="text-[10.5px] text-major bg-majorbg border border-major rounded p-1.5 mb-2">{error}</div>}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+            <select className={`${inputCls} sm:col-span-2`} value={auditId} onChange={(e) => setAuditId(e.target.value)}>
+              <option value="">Select audit…</option>
+              {audits.map((a) => <option key={a.id} value={a.id}>{a.name} — {new Date(a.created_at).toLocaleDateString()}</option>)}
+            </select>
+            <textarea className={`${inputCls} sm:col-span-2`} rows={2} placeholder="Non-conformity description" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <input className={inputCls} placeholder="Responsible person (optional)" value={responsiblePerson} onChange={(e) => setResponsiblePerson(e.target.value)} />
+            <input type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          </div>
+          <button disabled={saving || !auditId || !description.trim()} onClick={handleCreate} className="text-[11px] bg-navy text-white px-3 py-1.5 rounded disabled:opacity-50">
+            {saving ? 'Saving…' : 'Add Non-Conformity'}
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto">
+        {items.map((nc) => {
+          const status = nc.closed ? 'closed' : (nc.due_date && nc.due_date < new Date().toISOString().slice(0, 10) ? 'overdue' : 'pending')
+          const style = { closed: { bg: '#DCEDE3', text: '#2F6E4E' }, overdue: { bg: '#F3CFC7', text: '#A83A2C' }, pending: { bg: '#F7EAC9', text: '#96690F' } }[status]
+          return (
+            <div key={nc.id} className="text-[11px] border border-line rounded p-1.5 flex justify-between items-start gap-2">
+              <div>
+                <div className="font-medium">{nc.description}</div>
+                <div className="text-inksoft mt-0.5">
+                  {nc.responsible_person && `${nc.responsible_person} • `}
+                  {nc.due_date ? `Due ${nc.due_date}` : 'No due date set'}
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                <span className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: style.bg, color: style.text }}>
+                  {status === 'closed' ? 'Closed' : status === 'overdue' ? 'Overdue' : 'Pending'}
+                </span>
+                <button onClick={() => handleResolve(nc.id)} className="text-[10px] text-conform border border-conform/40 px-1.5 py-0.5 rounded whitespace-nowrap">Close</button>
+              </div>
+            </div>
+          )
+        })}
+        {!items.length && <div className="text-xs text-inksoft italic">No open non-conformities.</div>}
+      </div>
+    </div>
+  )
+}
+
+export default function MyDataDashboard({ onBack }) {
+  const [culture, setCulture] = useState(null)
+  const [companyCulture, setCompanyCulture] = useState([])
+  const [ccvSchedule, setCcvSchedule] = useState(null)
+  const [ccvByFatalRisk, setCcvByFatalRisk] = useState([])
+  const [flraFatalRisk, setFlraFatalRisk] = useState([])
+  const [combinedFatalRisk, setCombinedFatalRisk] = useState([])
+  const [deptModuleCounts, setDeptModuleCounts] = useState([])
+  const [deptJsaRisk, setDeptJsaRisk] = useState([])
+  const [deptFatalRisk, setDeptFatalRisk] = useState([])
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setLoading(true)
+    setError('')
+    Promise.all([
+      getSafetyCultureScore('own', null, 90),
+      getSafetyCultureByCompany(90),
+      getCcvScheduleSummaryOwn(),
+      getCcvByFatalRiskOwn(dateFrom || null, dateTo || null),
+      getFlraFatalRiskOwn(dateFrom || null, dateTo || null),
+      getFatalRiskFrequency('own', null, dateFrom || null, dateTo || null),
+      getModuleCountsByCompanyOwn(),
+      getJSARiskByCompanyOwn(),
+      getFatalRiskByCompanyOwn(),
+    ])
+      .then(([cult, compCult, sched, ccvFr, flraFr, combinedFr, dmc, djr, dfr]) => {
+        setCulture(cult); setCompanyCulture(compCult); setCcvSchedule(sched)
+        setCcvByFatalRisk(ccvFr); setFlraFatalRisk(flraFr); setCombinedFatalRisk(combinedFr)
+        setDeptModuleCounts(dmc); setDeptJsaRisk(djr); setDeptFatalRisk(dfr)
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [dateFrom, dateTo])
+
+  const refreshScheduleSummary = () => {
+    getCcvScheduleSummaryOwn().then(setCcvSchedule).catch(() => {})
+  }
+
+  return (
+    <div className="p-4 md:p-7">
+      <button onClick={onBack} className="text-xs text-navy2 mb-3 flex items-center gap-1">
+        ← Back
+      </button>
+
+      <h1 className="font-display text-xl font-semibold text-navy mb-1">My Data — Dashboard</h1>
+      <div className="text-[11px] text-inksoft mb-3">Your own consulting work: safety culture, leading indicators, and action tracking, across every client company.</div>
+
+      <div className="flex flex-wrap gap-2 mb-5 items-end">
+        <label className="text-[10px] text-inksoft">Filter fatal risk charts</label>
+        <input type="date" className="px-2 py-1 border border-line rounded text-[11px]" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+        <span className="text-[11px] text-inksoft">to</span>
+        <input type="date" className="px-2 py-1 border border-line rounded text-[11px]" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+      </div>
+
+      {error && <div className="text-sm text-major bg-majorbg border border-major rounded p-2.5 mb-3">{error}</div>}
+      {loading && <div className="text-sm text-inksoft mb-3">Loading…</div>}
+
+      <div className="bg-white border border-line rounded-md p-5 mb-4 max-w-3xl">
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+          <GaugeChart culture={culture} size={280} />
+          <div className="flex-1 w-full pt-1">
+            <div className="font-display text-base font-bold text-navy mb-1">Safety Culture Score</div>
+            <div className="text-[11px] text-inksoft mb-3">Fixed 90-day window, consolidated across all your client companies.</div>
+            <ComponentBreakdownList culture={culture} />
+          </div>
+        </div>
+      </div>
+
+      {companyCulture.length > 0 && (
+        <div className="bg-white border border-line rounded-md p-4 mb-4">
+          <div className="font-display text-sm font-semibold text-navy mb-1">Safety Culture by Company</div>
+          <div className="text-[10.5px] text-inksoft mb-3">Same composite score, broken out per client company.</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {companyCulture.map((c) => (
+              <div key={c.company_name} className="border border-line rounded-md p-2.5 flex flex-col items-center">
+                <div className="text-[11px] font-medium text-navy text-center mb-1 truncate w-full">{c.company_name}</div>
+                <GaugeChart culture={c} size={130} showTicks={false} />
+              </div>
+            ))}
+          </div>
+
+          {deptModuleCounts.length > 0 && (
+            <div className="border-t border-line mt-4 pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                <div>
+                  <div className="font-display text-[13px] font-semibold text-navy mb-2">Records by Company</div>
+                  <StackedVerticalBarChart
+                    data={[...new Set(deptModuleCounts.map((r) => r.company_name))].map((comp) => ({
+                      label: comp,
+                      jsa: Number(deptModuleCounts.find((r) => r.company_name === comp && r.module === 'jsa')?.count || 0),
+                      flra: Number(deptModuleCounts.find((r) => r.company_name === comp && r.module === 'flra')?.count || 0),
+                    }))}
+                    seriesA="jsa" seriesB="flra" labelA="JSA" labelB="FLRA" colorA="#16253D" colorB="#B8862B"
+                  />
+                </div>
+                <div>
+                  <div className="font-display text-[13px] font-semibold text-navy mb-1">JSA Risk Reduction by Company</div>
+                  <div className="text-[10px] text-inksoft mb-2">Average raw vs. residual risk score per company.</div>
+                  <table className="w-full text-[10.5px]">
+                    <thead>
+                      <tr className="border-b border-line">
+                        <th className="text-left py-1 font-semibold text-navy2">Company</th>
+                        <th className="text-center py-1 font-semibold text-navy2">Raw</th>
+                        <th className="text-center py-1 font-semibold text-navy2">Residual</th>
+                        <th className="text-center py-1 font-semibold text-navy2">Steps</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deptJsaRisk.map((r) => (
+                        <tr key={r.company_name} className="border-b border-line last:border-0">
+                          <td className="py-1.5">{r.company_name}</td>
+                          <td className="text-center py-1.5">{r.avg_raw_score != null ? Number(r.avg_raw_score).toFixed(1) : '—'}</td>
+                          <td className="text-center py-1.5">{r.avg_residual_score != null ? Number(r.avg_residual_score).toFixed(1) : '—'}</td>
+                          <td className="text-center py-1.5">{r.step_count}</td>
+                        </tr>
+                      ))}
+                      {!deptJsaRisk.length && <tr><td colSpan={4} className="text-inksoft italic py-2">No scored JSA steps yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="font-display text-[13px] font-semibold text-navy mb-2">Fatal Risk Frequency by Company</div>
+              <table className="w-full text-[10.5px]">
+                <thead>
+                  <tr className="border-b border-line">
+                    <th className="text-left py-1 font-semibold text-navy2">Company</th>
+                    <th className="text-left py-1 font-semibold text-navy2">Fatal Risk</th>
+                    <th className="text-center py-1 font-semibold text-navy2">JSA</th>
+                    <th className="text-center py-1 font-semibold text-navy2">FLRA</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deptFatalRisk.filter((r) => Number(r.jsa_count) + Number(r.flra_count) > 0).map((r, i) => (
+                    <tr key={i} className="border-b border-line last:border-0">
+                      <td className="py-1.5">{r.company_name}</td>
+                      <td className="py-1.5">{r.fatal_risk}</td>
+                      <td className="text-center py-1.5">{r.jsa_count}</td>
+                      <td className="text-center py-1.5">{r.flra_count}</td>
+                    </tr>
+                  ))}
+                  {!deptFatalRisk.filter((r) => Number(r.jsa_count) + Number(r.flra_count) > 0).length && (
+                    <tr><td colSpan={4} className="text-inksoft italic py-2">No fatal risks recorded yet.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="border-l-4 pl-3 mb-3 mt-6" style={{ borderColor: '#2F6E4E' }}>
+        <h2 className="font-display text-base font-bold text-navy">Leading Indicators</h2>
+      </div>
+
+      <CCVSchedulePanel onScheduled={refreshScheduleSummary} />
+
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 mb-3">
+        <StatCard label="CCVs Planned" value={ccvSchedule?.planned_count ?? '—'} />
+        <StatCard label="Conducted" value={ccvSchedule?.conducted_count ?? '—'} />
+        <StatCard label="Upcoming" value={ccvSchedule?.upcoming_count ?? '—'} />
+        <StatCard label="Overdue" value={ccvSchedule?.overdue_count ?? '—'} />
+        <StatCard label="% Completed" value={ccvSchedule?.completion_pct != null ? `${ccvSchedule.completion_pct}%` : '—'} />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+        <div className="bg-white border border-line rounded-md p-3">
+          <div className="font-display text-[13px] font-semibold text-navy mb-2">CCVs by Fatal Risk Category</div>
+          <VerticalBarChart data={ccvByFatalRisk.map((r) => ({ label: r.fatal_risk, value: Number(r.count) }))} color="#16253D" />
+        </div>
+        <div className="bg-white border border-line rounded-md p-3">
+          <div className="font-display text-[13px] font-semibold text-navy mb-2">Fatal Risks — FLRA Only</div>
+          <VerticalBarChart data={flraFatalRisk.map((r) => ({ label: r.fatal_risk, value: Number(r.count) }))} color="#B8862B" />
+        </div>
+        <div className="bg-white border border-line rounded-md p-3">
+          <div className="font-display text-[13px] font-semibold text-navy mb-2">Fatal Risks — JSA + FLRA Combined</div>
+          <StackedVerticalBarChart
+            data={combinedFatalRisk.map((r) => ({ label: r.fatal_risk, jsa: Number(r.jsa_count), flra: Number(r.flra_count) }))}
+            seriesA="jsa" seriesB="flra" labelA="JSA" labelB="FLRA" colorA="#16253D" colorB="#B8862B"
+          />
+        </div>
+      </div>
+
+      <NonConformitiesPanel />
+    </div>
+  )
+}
