@@ -8,6 +8,7 @@ import FLRAList from './FLRAList.jsx'
 import FLRAEditor from './FLRAEditor.jsx'
 import Billing from './Billing.jsx'
 import InviteTeamMember from './InviteTeamMember.jsx'
+import TeamManagement from './TeamManagement.jsx'
 import {
   ClipboardList,
   ClipboardCheck,
@@ -18,6 +19,7 @@ import {
   ArrowLeft,
   LogOut,
   CreditCard,
+  Users,
 } from 'lucide-react'
 
 const APP_NAV = [
@@ -44,6 +46,7 @@ export default function SubscriberShell({ organization }) {
 
   const accessState = getAccessState(organization)
   const effectiveSection = accessState.access === 'restricted' ? 'billing' : section
+  const navItems = organization.role === 'admin' ? [...APP_NAV, { key: 'team', label: 'Team', icon: Users }] : APP_NAV
 
   const goToSection = (key) => {
     setSection(key)
@@ -119,7 +122,7 @@ export default function SubscriberShell({ organization }) {
         )}
 
         <div className="py-3.5">
-          {APP_NAV.map((item) => (
+          {navItems.map((item) => (
             <div
               key={item.key}
               onClick={() => goToSection(item.key)}
@@ -176,6 +179,7 @@ export default function SubscriberShell({ organization }) {
         {effectiveSection === 'audits' && <AuditList onOpen={openAudit} onNew={newAudit} />}
         {effectiveSection === 'flras' && <FLRAList onOpen={openFLRA} onNew={newFLRA} />}
         {effectiveSection === 'billing' && <Billing organization={organization} accessState={accessState} />}
+        {effectiveSection === 'team' && organization.role === 'admin' && <TeamManagement organizationId={organization.id} />}
         {effectiveSection === 'editor' && (
           <AuditEditor
             key={editorKey}
@@ -213,7 +217,7 @@ export default function SubscriberShell({ organization }) {
                 </button>
               )
             })
-          : APP_NAV.map((item) => {
+          : navItems.map((item) => {
               const Icon = item.icon
               const active = effectiveSection === item.key || (item.key === 'flras' && effectiveSection === 'flra-editor')
               return (

@@ -11,12 +11,12 @@ const CULTURE_COMPONENTS = [
   { key: 'ccv_compliance_score', label: 'CCV Compliance', weight: 0.15, color: '#2C6E8F' },
 ]
 
-function GaugeChart({ culture, size = 130 }) {
+function GaugeChart({ culture, size = 150 }) {
   const score = culture?.overall_score != null ? Number(culture.overall_score) : null
   const cx = size / 2
   const cy = size / 2 + 6
-  const radius = size / 2 - 30
-  const strokeW = 26
+  const radius = size / 2 - 26
+  const strokeW = Math.max(10, size * 0.11)
 
   const polar = (angleDeg, r) => {
     const rad = (angleDeg * Math.PI) / 180
@@ -32,7 +32,7 @@ function GaugeChart({ culture, size = 130 }) {
   const hasScore = score != null
   const clamped = hasScore ? Math.max(0, Math.min(100, score)) : 0
   const needleAngle = scoreAngle(clamped)
-  const needleEnd = polar(needleAngle, radius - 14)
+  const needleEnd = polar(needleAngle, radius - strokeW - 4)
 
   const zoneLabel = clamped < 40 ? 'Needs Attention' : clamped < 70 ? 'Developing' : 'Strong'
   const zoneColor = clamped < 40 ? '#A83A2C' : clamped < 70 ? '#C08A1E' : '#2F6E4E'
@@ -40,31 +40,31 @@ function GaugeChart({ culture, size = 130 }) {
   const availableComponents = culture ? CULTURE_COMPONENTS.filter((c) => culture[c.key] != null) : []
 
   return (
-    <div className="flex flex-col items-center flex-shrink-0" style={{ width: size + 48 }}>
-      <svg viewBox={`-24 0 ${size + 48} ${cy + 34}`} width="100%" style={{ maxWidth: size + 48 }}>
+    <div className="flex flex-col items-center flex-shrink-0" style={{ width: size + 40 }}>
+      <svg viewBox={`-20 0 ${size + 40} ${cy + 30}`} width="100%" style={{ maxWidth: size + 40 }}>
         <path d={arcPath(180, 120, radius)} stroke="#A83A2C" strokeWidth={strokeW} fill="none" strokeLinecap="round" />
         <path d={arcPath(120, 60, radius)} stroke="#C08A1E" strokeWidth={strokeW} fill="none" />
         <path d={arcPath(60, 0, radius)} stroke="#2F6E4E" strokeWidth={strokeW} fill="none" strokeLinecap="round" />
 
         {availableComponents.map((c) => {
           const angle = scoreAngle(Number(culture[c.key]))
-          const inner = polar(angle, radius - strokeW / 2 - 4)
-          const outer = polar(angle, radius + strokeW / 2 + 4)
-          return <line key={c.key} x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke={c.color} strokeWidth="3" strokeLinecap="round" />
+          const inner = polar(angle, radius - strokeW / 2 - 3)
+          const outer = polar(angle, radius + strokeW / 2 + 3)
+          return <line key={c.key} x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke={c.color} strokeWidth="2.5" strokeLinecap="round" />
         })}
 
         {hasScore && (
           <>
-            <line x1={cx} y1={cy} x2={needleEnd.x} y2={needleEnd.y} stroke="#16253D" strokeWidth="4" strokeLinecap="round" />
-            <circle cx={cx} cy={cy} r="8" fill="#16253D" />
+            <line x1={cx} y1={cy} x2={needleEnd.x} y2={needleEnd.y} stroke="#16253D" strokeWidth="3" strokeLinecap="round" />
+            <circle cx={cx} cy={cy} r="6" fill="#16253D" />
           </>
         )}
-        <text x={cx} y={cy + 32} textAnchor="middle" fontSize="32" fontWeight="700" fill="#16253D">
+        <text x={cx} y={cy + size * 0.16} textAnchor="middle" fontSize={size * 0.19} fontWeight="700" fill="#16253D">
           {hasScore ? Math.round(score) : '—'}
         </text>
       </svg>
-      {hasScore && <div className="text-sm font-semibold -mt-1" style={{ color: zoneColor }}>{zoneLabel}</div>}
-      {!hasScore && <div className="text-xs text-inksoft italic -mt-1">Not enough data yet</div>}
+      {hasScore && <div className="text-xs font-semibold -mt-1" style={{ color: zoneColor }}>{zoneLabel}</div>}
+      {!hasScore && <div className="text-[11px] text-inksoft italic -mt-1">Not enough data yet</div>}
     </div>
   )
 }
@@ -111,7 +111,7 @@ export default function Dashboard({ onOpenOrgDashboard }) {
             className="border border-line rounded-md p-2.5 flex flex-col items-center cursor-pointer hover:border-navy2 bg-white"
           >
             <div className="text-[11px] font-medium text-navy text-center mb-1 truncate w-full">{p.orgName}</div>
-            <GaugeChart culture={p.culture} size={130} />
+            <GaugeChart culture={p.culture} size={150} />
           </div>
         ))}
       </div>

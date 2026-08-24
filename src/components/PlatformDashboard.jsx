@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { uploadDataUrl } from '../lib/auditRepo'
+import { supabase } from '../lib/supabaseClient'
 import {
   listAllOrganizations, createOrganization, getBillingSummary,
   listPlatformAdmins, addPlatformAdmin, removePlatformAdmin,
@@ -63,6 +64,7 @@ export default function PlatformDashboard() {
 
   const TABS = [
     { key: 'organizations', label: 'Organizations' },
+    { key: 'users', label: 'Users' },
     { key: 'admins', label: 'Platform Admins' },
   ]
 
@@ -99,6 +101,8 @@ export default function PlatformDashboard() {
         <div className="text-sm text-inksoft">Loading…</div>
       ) : tab === 'organizations' ? (
         <OrganizationsTab orgs={orgs} onRefresh={() => listAllOrganizations().then(setOrgs)} />
+      ) : tab === 'users' ? (
+        <UsersTab orgs={orgs} />
       ) : (
         <AdminsTab />
       )}
@@ -343,6 +347,110 @@ function OrgDetailPanel({ org, onRefresh }) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ==================== Users tab ====================
+
+const ROLE_OPTIONS = [
+  { key: 'admin', label: 'Organization Admin' },
+  { key: 'manager', label: 'Manager' },
+  { key: 'member', label: 'Member' },
+  { key: 'viewer', label: 'Viewer' },
+]
+
+function UsersTab({ orgs }) {
+  const [orgId, setOrgId] = useState('')
+  const [members, setMembers] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [busyUserId, setBusyUserId] = useState(null)
+
+  const refresh = (id) => {
+    if (!id) { setMembers([]); return }
+    setLoading(true)
+    supabase.rpc('platform_list_org_members', { target_org_id: id })
+      .then(({ data, error }) => {
+        if (error) throw error
+        setMembers(data || [])
+      })
+      .catch((err) => setMsg(`Error: ${err.message}`))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { refresh(orgId) }, [orgId])
+
+  const handleRoleChange = async (userId, newRole) => {
+    setBusyUserId(userId)
+    setMsg('')
+    try {
+      const { error } = await supabase.rpc('set_member_role', { target_user_id: userId, target_org_id: orgId, new_role: newRole })
+      if (error) throw error
+      refresh(orgId)
+    } catch (err) {
+      setMsg(`Error: ${err.message}`)
+    }
+    setBusyUserId(null)
+  }
+
+  const handleRemove = async (userId, email) => {
+    if (!confirm(`Remove ${email} from this organization?`)) return
+    setBusyUserId(userId)
+    setMsg('')
+    try {
+      const { error } = await supabase.rpc('remove_org_member', { target_user_id: userId, target_org_id: orgId })
+      if (error) throw error
+      refresh(orgId)
+    } catch (err) {
+      setMsg(`Error: ${err.message}`)
+    }
+    setBusyUserId(null)
+  }
+
+  return (
+    <div className="bg-white border border-line rounded-md p-4 md:p-5">
+      <div className="text-[11px] font-semibold text-navy2 uppercase tracking-wide mb-2">Select Organization</div>
+      <select className="px-2.5 py-1.5 border border-line rounded text-sm mb-4 max-w-sm w-full" value={orgId} onChange={(e) => setOrgId(e.target.value)}>
+        <option value="">Choose an organization…</option>
+        {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+      </select>
+
+      {msg && <div className={`text-xs mb-3 px-2.5 py-1.5 rounded ${msg.startsWith('Error') ? 'bg-majorbg text-major' : 'bg-conformbg text-conform'}`}>{msg}</div>}
+
+      {loading ? (
+        <div className="text-xs text-inksoft">Loading…</div>
+      ) : orgId && !members.length ? (
+        <div className="text-xs text-inksoft italic">No members in this organization yet.</div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {members.map((m) => (
+            <div key={m.user_id} className="flex flex-wrap justify-between items-center gap-2 border border-line rounded px-3 py-2">
+              <div className="text-xs">
+                <div className="font-medium">{m.email}</div>
+                <div className="text-inksoft text-[10.5px]">Joined {new Date(m.joined_at).toLocaleDateString()}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  className="px-2 py-1 border border-line rounded text-xs"
+                  value={m.role}
+                  disabled={busyUserId === m.user_id}
+                  onChange={(e) => handleRoleChange(m.user_id, e.target.value)}
+                >
+                  {ROLE_OPTIONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+                </select>
+                <button
+                  disabled={busyUserId === m.user_id}
+                  onClick={() => handleRemove(m.user_id, m.email)}
+                  className="text-[11px] text-major border border-major/40 px-2 py-1 rounded disabled:opacity-50"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

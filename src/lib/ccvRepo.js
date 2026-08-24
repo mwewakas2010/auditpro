@@ -92,7 +92,7 @@ export async function loadCCV(id) {
 
 // ---------- Save (insert or update) a CCV instance ----------
 
-export async function saveCCV({ ccvId, templateId, companyId, meta, responses }) {
+export async function saveCCV({ ccvId, templateId, companyId, organizationId, meta, responses }) {
   const { data: userData } = await supabase.auth.getUser()
   const owner = userData?.user?.id
 
@@ -100,6 +100,7 @@ export async function saveCCV({ ccvId, templateId, companyId, meta, responses })
     owner,
     template_id: templateId,
     company_id: companyId || null,
+    organization_id: organizationId || null,
     assessors: meta.assessors,
     date_time: meta.dateTime || null,
     location: meta.location,
@@ -179,6 +180,7 @@ export async function syncPendingCCVs() {
         ccvId: realCcvId,
         templateId: entry.templateId,
         companyId: entry.companyId,
+        organizationId: entry.organizationId,
         meta: entry.meta,
         responses: entry.responses,
       })

@@ -53,6 +53,7 @@ export default function Shell() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [selectedOrgForDashboard, setSelectedOrgForDashboard] = useState(null)
   const [roleCheckDone, setRoleCheckDone] = useState(false)
+  const [myOrgId, setMyOrgId] = useState(null)
 
   const openOrgDashboard = (organizationId, organizationName) => {
     setSelectedOrgForDashboard({ id: organizationId, name: organizationName })
@@ -86,6 +87,7 @@ export default function Shell() {
         .then((result) => {
           const org = result?.organization || result
           if (org?.id) {
+            setMyOrgId(org.id)
             setSelectedOrgForDashboard({ id: org.id, name: org.name })
             setSection('organization-dashboard')
           }
@@ -304,7 +306,7 @@ export default function Shell() {
           />
         )}
         {section === 'ccv-editor' && (
-          <CCVEditor key={ccvEditorKey} ccvId={ccvId} templateId={ccvTemplateId} onExit={() => goToSection('ccvs')} />
+          <CCVEditor key={ccvEditorKey} ccvId={ccvId} templateId={ccvTemplateId} organizationId={myOrgId} onExit={() => goToSection('ccvs')} />
         )}
         {section === 'flra-landing' && (
           <FLRALanding
@@ -322,14 +324,14 @@ export default function Shell() {
           <FLRAEditor
             key={flraEditorKey}
             flraId={flraId}
-            organizationId={null}
+            organizationId={myOrgId}
             initialCompanyId={pendingFlraCompanyId}
             initialAcknowledgedAt={pendingFlraAcknowledgedAt}
             onExit={() => goToSection('flras')}
           />
         )}
         {section === 'jsa-editor' && (
-          <JSAEditor key={jsaEditorKey} jsaId={jsaId} organizationId={null} onExit={() => goToSection('jsas')} />
+          <JSAEditor key={jsaEditorKey} jsaId={jsaId} organizationId={myOrgId} onExit={() => goToSection('jsas')} />
         )}
         {section === 'platform' && isAdmin && <PlatformDashboard />}
       </div>

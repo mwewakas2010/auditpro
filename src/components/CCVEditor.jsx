@@ -5,6 +5,8 @@ import { saveLocalCCV, getLocalCCV, deleteLocalCCV } from '../lib/offlineStore'
 import { useOnlineStatus } from '../lib/useOnlineStatus'
 import { signCCV, loadCCVSignoffs, getSavedSignature, saveSignatureForReuse } from '../lib/signatureRepo'
 import { generateCCVPdf } from '../utils/ccvPdfExport'
+import { listCCVSchedule, listCCVScheduleOwn } from '../lib/analyticsRepo'
+import { supabase } from '../lib/supabaseClient'
 import CameraCapture from './CameraCapture.jsx'
 import SignaturePad from './SignaturePad.jsx'
 import HazardIcon from './HazardIcon.jsx'
@@ -13,7 +15,7 @@ function emptyMeta() {
   return { assessors: '', dateTime: '', location: '', department: '', section: '', status: 'in_progress' }
 }
 
-export default function CCVEditor({ ccvId, templateId, onExit }) {
+export default function CCVEditor({ ccvId, templateId, organizationId = null, onExit }) {
   const [id, setId] = useState(ccvId)
   const [localId, setLocalId] = useState(() => ccvId || `local-${crypto.randomUUID()}`)
   const [template, setTemplate] = useState(null)
@@ -33,6 +35,9 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
   const [savedSignature, setSavedSignature] = useState(null)
   const [signing, setSigning] = useState(false)
   const [signError, setSignError] = useState('')
+  const [matchingSchedule, setMatchingSchedule] = useState([])
+  const [linking, setLinking] = useState(false)
+  const [linkMsg, setLinkMsg] = useState('')
   const fileInputs = useRef({})
 
   const online = useOnlineStatus()
@@ -47,6 +52,28 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
   useEffect(() => {
     if (id) loadCCVSignoffs(id).then(setSignoffs).catch(() => {})
   }, [id])
+
+  useEffect(() => {
+    if (!id || !template) { setMatchingSchedule([]); return }
+    const fetchFn = organizationId ? listCCVSchedule(organizationId, true) : listCCVScheduleOwn(true)
+    fetchFn
+      .then((rows) => setMatchingSchedule(rows.filter((r) => r.template_id === template.id)))
+      .catch(() => setMatchingSchedule([]))
+  }, [id, template, organizationId])
+
+  const handleLinkSchedule = async (scheduleId) => {
+    setLinking(true)
+    setLinkMsg('')
+    try {
+      const { error } = await supabase.rpc('link_scheduled_ccv', { schedule_id: scheduleId, new_ccv_instance_id: id })
+      if (error) throw error
+      setLinkMsg('Linked to the scheduled CCV.')
+      setMatchingSchedule((rows) => rows.filter((r) => r.id !== scheduleId))
+    } catch (err) {
+      setLinkMsg(`Error: ${err.message}`)
+    }
+    setLinking(false)
+  }
 
   useEffect(() => {
     ;(async () => {
@@ -83,6 +110,7 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
           await saveLocalCCV(ccvId, {
             templateId: result.template.id,
             companyId: result.instance.company_id || null,
+            organizationId: result.instance.organization_id || organizationId,
             meta: loadedMeta,
             responses: result.responses,
             pendingSync: false,
@@ -118,7 +146,7 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
   useEffect(() => {
     if (!hasInitiallyLoaded.current || !template) return
     const t = setTimeout(() => {
-      saveLocalCCV(localId, { templateId: template.id, companyId, meta, responses, pendingSync: true })
+      saveLocalCCV(localId, { templateId: template.id, companyId, organizationId, meta, responses, pendingSync: true })
     }, 600)
     return () => clearTimeout(t)
   }, [meta, responses, companyId, localId, template])
@@ -187,7 +215,7 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
     const newMeta = markFinal ? { ...meta, status: 'final' } : meta
 
     if (!online) {
-      await saveLocalCCV(localId, { templateId: template.id, companyId, meta: newMeta, responses, pendingSync: true })
+      await saveLocalCCV(localId, { templateId: template.id, companyId, organizationId, meta: newMeta, responses, pendingSync: true })
       setMeta(newMeta)
       setSaveMsg("📴 Offline — saved on this device. Will sync automatically once you're back online.")
       setSaving(false)
@@ -195,7 +223,7 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
     }
 
     try {
-      const savedId = await saveCCV({ ccvId: id, templateId: template.id, companyId, meta: newMeta, responses })
+      const savedId = await saveCCV({ ccvId: id, templateId: template.id, companyId, organizationId, meta: newMeta, responses })
       if (localId !== savedId) {
         await deleteLocalCCV(localId)
         setLocalId(savedId)
@@ -204,11 +232,11 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
       setMeta(newMeta)
       const result = await loadCCV(savedId)
       setResponses(result.responses)
-      await saveLocalCCV(savedId, { templateId: template.id, companyId, meta: newMeta, responses: result.responses, pendingSync: false })
+      await saveLocalCCV(savedId, { templateId: template.id, companyId, organizationId, meta: newMeta, responses: result.responses, pendingSync: false })
       setSaveMsg('Saved ' + new Date().toLocaleTimeString())
       setOfflineLoaded(false)
     } catch (err) {
-      await saveLocalCCV(localId, { templateId: template.id, companyId, meta: newMeta, responses, pendingSync: true })
+      await saveLocalCCV(localId, { templateId: template.id, companyId, organizationId, meta: newMeta, responses, pendingSync: true })
       const looksLikeNetworkFailure = !online || err.name === 'TypeError' || /fetch|network/i.test(err.message || '')
       if (looksLikeNetworkFailure) {
         setSaveMsg("Could not reach the server — saved on this device instead. Will retry automatically once back online.")
@@ -357,6 +385,35 @@ export default function CCVEditor({ ccvId, templateId, onExit }) {
           <input className={inputCls} value={meta.section} onChange={(e) => setMeta({ ...meta, section: e.target.value })} />
         </div>
       </div>
+
+      {id && matchingSchedule.length > 0 && (
+        <div className="bg-white border border-line rounded-md p-4 mb-5">
+          <h3 className="font-display text-[13px] font-semibold text-navy mb-2">Link to Scheduled CCV</h3>
+          <div className="text-[10.5px] text-inksoft mb-2">This matches {matchingSchedule.length} pending scheduled {matchingSchedule.length === 1 ? 'entry' : 'entries'} for this hazard category. Link this CCV to mark one as conducted.</div>
+          {linkMsg && (
+            <div className={`text-[10.5px] mb-2 px-2 py-1 rounded ${linkMsg.startsWith('Error') ? 'bg-majorbg text-major' : 'bg-conformbg text-conform'}`}>{linkMsg}</div>
+          )}
+          <div className="flex flex-col gap-1.5">
+            {matchingSchedule.map((s) => (
+              <div key={s.id} className="flex justify-between items-center text-[11px] border border-line rounded p-1.5">
+                <div>
+                  Planned {s.planned_date}
+                  {s.assigned_to && ` • ${s.assigned_to}`}
+                  {s.assigned_section && ` • ${s.assigned_section}`}
+                  {s.is_overdue && <span className="text-major font-semibold"> • Overdue</span>}
+                </div>
+                <button
+                  disabled={linking}
+                  onClick={() => handleLinkSchedule(s.id)}
+                  className="text-[10px] bg-navy text-white px-2 py-1 rounded disabled:opacity-50"
+                >
+                  Link
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {categories.map((cat) => {
         const score = categoryScore(cat)
