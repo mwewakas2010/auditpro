@@ -9,6 +9,7 @@ import FLRAEditor from './FLRAEditor.jsx'
 import Billing from './Billing.jsx'
 import InviteTeamMember from './InviteTeamMember.jsx'
 import TeamManagement from './TeamManagement.jsx'
+import OrganizationDashboard from './OrganizationDashboard.jsx'
 import {
   ClipboardList,
   ClipboardCheck,
@@ -20,9 +21,11 @@ import {
   LogOut,
   CreditCard,
   Users,
+  LayoutDashboard,
 } from 'lucide-react'
 
 const APP_NAV = [
+  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'audits', label: 'My Audits', icon: ClipboardList },
   { key: 'flras', label: 'FLRAs', icon: ClipboardCheck },
   { key: 'billing', label: 'Billing & Plans', icon: CreditCard },
@@ -36,7 +39,7 @@ const AUDIT_TAB_MOBILE = {
 }
 
 export default function SubscriberShell({ organization }) {
-  const [section, setSection] = useState('audits') // 'audits' | 'editor' | 'flras' | 'flra-editor' | 'billing'
+  const [section, setSection] = useState('dashboard') // 'dashboard' | 'audits' | 'editor' | 'flras' | 'flra-editor' | 'billing' | 'team'
   const [auditId, setAuditId] = useState(null)
   const [auditTab, setAuditTab] = useState('setup')
   const [editorKey, setEditorKey] = useState(0)
@@ -176,6 +179,9 @@ export default function SubscriberShell({ organization }) {
 
       {/* Main content */}
       <div className="flex-1 min-w-0 overflow-y-auto pb-16 md:pb-0">
+        {effectiveSection === 'dashboard' && (
+          <OrganizationDashboard organizationId={organization.id} organizationName={organization.name} onBack={null} />
+        )}
         {effectiveSection === 'audits' && <AuditList onOpen={openAudit} onNew={newAudit} />}
         {effectiveSection === 'flras' && <FLRAList onOpen={openFLRA} onNew={newFLRA} />}
         {effectiveSection === 'billing' && <Billing organization={organization} accessState={accessState} />}

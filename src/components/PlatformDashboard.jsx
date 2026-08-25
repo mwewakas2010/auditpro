@@ -408,6 +408,56 @@ function UsersTab({ orgs }) {
     setBusyUserId(null)
   }
 
+  const setUserBan = async (userId, banned) => {
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData?.session?.access_token
+    const res = await fetch('/api/platform-set-user-ban', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ userId, banned }),
+    })
+    const body = await res.json()
+    if (!res.ok) throw new Error(body.error || 'Request failed')
+  }
+
+  const handleBlock = async (userId, email) => {
+    if (!confirm(`Block ${email} from the entire platform? They won't be able to log in anywhere until unblocked.`)) return
+    setBusyUserId(userId)
+    setMsg('')
+    try {
+      await setUserBan(userId, true)
+      refresh(orgId)
+    } catch (err) {
+      setMsg(`Error: ${err.message}`)
+    }
+    setBusyUserId(null)
+  }
+
+  const handleDeleteAccount = async (userId, email) => {
+    if (!confirm(`Delete ${email}'s account? They will never be able to log in again. This can only be reversed by a Platform Admin unblocking them.`)) return
+    setBusyUserId(userId)
+    setMsg('')
+    try {
+      await setUserBan(userId, true)
+      refresh(orgId)
+    } catch (err) {
+      setMsg(`Error: ${err.message}`)
+    }
+    setBusyUserId(null)
+  }
+
+  const handleUnblock = async (userId, email) => {
+    setBusyUserId(userId)
+    setMsg('')
+    try {
+      await setUserBan(userId, false)
+      refresh(orgId)
+    } catch (err) {
+      setMsg(`Error: ${err.message}`)
+    }
+    setBusyUserId(null)
+  }
+
   return (
     <div className="bg-white border border-line rounded-md p-4 md:p-5">
       <div className="text-[11px] font-semibold text-navy2 uppercase tracking-wide mb-2">Select Organization</div>
@@ -427,10 +477,13 @@ function UsersTab({ orgs }) {
           {members.map((m) => (
             <div key={m.user_id} className="flex flex-wrap justify-between items-center gap-2 border border-line rounded px-3 py-2">
               <div className="text-xs">
-                <div className="font-medium">{m.email}</div>
+                <div className="font-medium flex items-center gap-1.5">
+                  {m.email}
+                  {m.is_blocked && <span className="text-[9.5px] font-semibold px-1.5 py-0.5 rounded-full bg-majorbg text-major">Blocked</span>}
+                </div>
                 <div className="text-inksoft text-[10.5px]">Joined {new Date(m.joined_at).toLocaleDateString()}</div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <select
                   className="px-2 py-1 border border-line rounded text-xs"
                   value={m.role}
@@ -439,12 +492,38 @@ function UsersTab({ orgs }) {
                 >
                   {ROLE_OPTIONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
                 </select>
+                {m.is_blocked ? (
+                  <button
+                    disabled={busyUserId === m.user_id}
+                    onClick={() => handleUnblock(m.user_id, m.email)}
+                    className="text-[11px] text-conform border border-conform/40 px-2 py-1 rounded disabled:opacity-50"
+                  >
+                    Unblock
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      disabled={busyUserId === m.user_id}
+                      onClick={() => handleBlock(m.user_id, m.email)}
+                      className="text-[11px] text-major border border-major/40 px-2 py-1 rounded disabled:opacity-50"
+                    >
+                      Block
+                    </button>
+                    <button
+                      disabled={busyUserId === m.user_id}
+                      onClick={() => handleDeleteAccount(m.user_id, m.email)}
+                      className="text-[11px] text-white bg-major px-2 py-1 rounded disabled:opacity-50"
+                    >
+                      Delete Account
+                    </button>
+                  </>
+                )}
                 <button
                   disabled={busyUserId === m.user_id}
                   onClick={() => handleRemove(m.user_id, m.email)}
                   className="text-[11px] text-major border border-major/40 px-2 py-1 rounded disabled:opacity-50"
                 >
-                  Remove
+                  Remove from Org
                 </button>
               </div>
             </div>

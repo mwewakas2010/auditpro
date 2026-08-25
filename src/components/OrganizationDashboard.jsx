@@ -415,7 +415,7 @@ function NonConformitiesPanel({ organizationId }) {
   )
 }
 
-export default function OrganizationDashboard({ organizationId, organizationName, onBack }) {
+export default function OrganizationDashboard({ organizationId, organizationName, onBack, backLabel = '← Back to Platform Dashboard' }) {
   const [orgCulture, setOrgCulture] = useState(null)
   const [deptCulture, setDeptCulture] = useState([])
   const [ccvSchedule, setCcvSchedule] = useState(null)
@@ -479,9 +479,11 @@ export default function OrganizationDashboard({ organizationId, organizationName
 
   return (
     <div className="p-4 md:p-7">
-      <button onClick={onBack} className="text-xs text-navy2 mb-3 flex items-center gap-1">
-        ← Back to Platform Dashboard
-      </button>
+      {onBack && (
+        <button onClick={onBack} className="text-xs text-navy2 mb-3 flex items-center gap-1">
+          {backLabel}
+        </button>
+      )}
 
       <h1 className="font-display text-xl font-semibold text-navy mb-1">{organizationName || 'Organization'} — Dashboard</h1>
       <div className="text-[11px] text-inksoft mb-3">Safety culture, leading indicators, and action tracking for this organization.</div>

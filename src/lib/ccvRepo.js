@@ -46,7 +46,35 @@ export async function listCCVs() {
   return data
 }
 
+function extractStoragePath(url, bucket) {
+  if (!url) return null
+  const marker = `/storage/v1/object/public/${bucket}/`
+  const idx = url.indexOf(marker)
+  if (idx === -1) return null
+  return url.slice(idx + marker.length)
+}
+
 export async function deleteCCV(id) {
+  // Clean up evidence photos/videos from Storage BEFORE deleting the
+  // database rows - once the rows are gone (via cascade), there's no
+  // longer any record of which files belonged to this CCV, so the files
+  // would be orphaned in storage forever with no way to find them again.
+  try {
+    const { data: responses } = await supabase.from('ccv_item_responses').select('id').eq('ccv_instance_id', id)
+    const responseIds = (responses || []).map((r) => r.id)
+    if (responseIds.length) {
+      const { data: files } = await supabase.from('ccv_evidence_files').select('file_url').in('ccv_item_response_id', responseIds)
+      const paths = (files || []).map((f) => extractStoragePath(f.file_url, 'evidence')).filter(Boolean)
+      if (paths.length) {
+        await supabase.storage.from('evidence').remove(paths)
+      }
+    }
+  } catch (err) {
+    // Don't block the actual deletion if storage cleanup has an issue -
+    // log it so it's visible, but still let the record itself be removed.
+    console.error('CCV evidence cleanup failed (continuing with deletion):', err)
+  }
+
   const { error } = await supabase.from('ccv_instances').delete().eq('id', id)
   if (error) throw error
 }
