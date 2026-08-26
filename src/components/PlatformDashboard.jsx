@@ -336,8 +336,7 @@ function OrgDetailPanel({ org, onRefresh }) {
             <input className={inputCls} placeholder="Email address" value={addEmail} onChange={(e) => setAddEmail(e.target.value)} />
             <div className="flex gap-2">
               <select className={inputCls} value={addRole} onChange={(e) => setAddRole(e.target.value)}>
-                <option value="member">User</option>
-                <option value="admin">Organization Admin</option>
+                {ROLE_OPTIONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
               </select>
               <button disabled={busy || !addEmail} onClick={handleAddUser} className="text-xs bg-navy text-white px-3 py-1.5 rounded disabled:opacity-50">
                 Add / Invite
@@ -366,6 +365,9 @@ function UsersTab({ orgs }) {
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
   const [busyUserId, setBusyUserId] = useState(null)
+  const [addEmail, setAddEmail] = useState('')
+  const [addRole, setAddRole] = useState('member')
+  const [adding, setAdding] = useState(false)
 
   const refresh = (id) => {
     if (!id) { setMembers([]); return }
@@ -380,6 +382,31 @@ function UsersTab({ orgs }) {
   }
 
   useEffect(() => { refresh(orgId) }, [orgId])
+
+  const handleAddUser = async () => {
+    setAdding(true)
+    setMsg('')
+    try {
+      await addExistingUserToOrg(addEmail, orgId, addRole)
+      setMsg(`Added ${addEmail} to the organization.`)
+      setAddEmail('')
+      refresh(orgId)
+    } catch (err) {
+      if (err.message.includes('NO_ACCOUNT')) {
+        try {
+          await inviteUserByEmail(addEmail, orgId, addRole)
+          setMsg(`No existing account — sent an invite email to ${addEmail}.`)
+          setAddEmail('')
+          refresh(orgId)
+        } catch (inviteErr) {
+          setMsg(`Error sending invite: ${inviteErr.message}`)
+        }
+      } else {
+        setMsg(`Error: ${err.message}`)
+      }
+    }
+    setAdding(false)
+  }
 
   const handleRoleChange = async (userId, newRole) => {
     setBusyUserId(userId)
@@ -465,6 +492,27 @@ function UsersTab({ orgs }) {
         <option value="">Choose an organization…</option>
         {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
       </select>
+
+      {orgId && (
+        <div className="border border-line rounded-md p-3 mb-4 bg-paper/40 max-w-lg">
+          <div className="text-[11px] font-semibold text-navy2 uppercase tracking-wide mb-2">Add User to This Organization</div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              className="px-2.5 py-1.5 border border-line rounded text-sm flex-1"
+              placeholder="Email address"
+              value={addEmail}
+              onChange={(e) => setAddEmail(e.target.value)}
+            />
+            <select className="px-2.5 py-1.5 border border-line rounded text-sm" value={addRole} onChange={(e) => setAddRole(e.target.value)}>
+              {ROLE_OPTIONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+            </select>
+            <button disabled={adding || !addEmail} onClick={handleAddUser} className="text-xs bg-navy text-white px-3 py-1.5 rounded disabled:opacity-50 whitespace-nowrap">
+              Add / Invite
+            </button>
+          </div>
+          <div className="text-[10px] text-inksoft mt-1.5">Existing account → added instantly. New email → sent a real invite email.</div>
+        </div>
+      )}
 
       {msg && <div className={`text-xs mb-3 px-2.5 py-1.5 rounded ${msg.startsWith('Error') ? 'bg-majorbg text-major' : 'bg-conformbg text-conform'}`}>{msg}</div>}
 
