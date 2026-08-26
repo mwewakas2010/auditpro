@@ -22,7 +22,7 @@ export default async function handler(req, res) {
   if (!email || !organizationId || !role) {
     return res.status(400).json({ error: 'Missing email, organizationId, or role' })
   }
-  if (!['admin', 'member'].includes(role)) {
+  if (!['admin', 'manager', 'member', 'viewer'].includes(role)) {
     return res.status(400).json({ error: 'Invalid role' })
   }
 
