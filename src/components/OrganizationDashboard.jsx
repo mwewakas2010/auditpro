@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabaseClient'
 import {
   getSafetyCultureScore, getSafetyCultureByDepartment, getCcvScheduleSummary,
   getCcvByFatalRisk, getFlraFatalRiskFrequency, getFatalRiskFrequency,
@@ -429,6 +430,8 @@ export default function OrganizationDashboard({ organizationId, organizationName
   const [deptJsaRisk, setDeptJsaRisk] = useState([])
   const [deptFatalRisk, setDeptFatalRisk] = useState([])
   const [orgActions, setOrgActions] = useState([])
+  const [auditStatus, setAuditStatus] = useState(null)
+  const [recentAudits, setRecentAudits] = useState([])
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [loading, setLoading] = useState(true)
@@ -451,13 +454,18 @@ export default function OrganizationDashboard({ organizationId, organizationName
       getJSARiskByDepartment(organizationId),
       getFatalRiskByDepartment(organizationId),
       getUnifiedActions('platform', organizationId, false),
+      supabase.rpc('analytics_module_status_counts', { scope_mode: 'platform', target_org_id: organizationId, overdue_threshold_days: 14 }),
+      listAuditsForOrg(organizationId),
     ])
-      .then(([org, depts, sched, ccvFr, flraFr, combinedFr, ccvLb, flraLb, notCond, dmc, djr, dfr, actions]) => {
+      .then(([org, depts, sched, ccvFr, flraFr, combinedFr, ccvLb, flraLb, notCond, dmc, djr, dfr, actions, moduleStatus, audits]) => {
         setOrgCulture(org); setDeptCulture(depts); setCcvSchedule(sched)
         setCcvByFatalRisk(ccvFr); setFlraFatalRisk(flraFr); setCombinedFatalRisk(combinedFr)
         setCcvLeaderboard(ccvLb); setFlraLeaderboard(flraLb); setNotConducting(notCond)
         setDeptModuleCounts(dmc); setDeptJsaRisk(djr); setDeptFatalRisk(dfr)
         setOrgActions(actions)
+        if (moduleStatus.error) throw moduleStatus.error
+        setAuditStatus((moduleStatus.data || []).find((r) => r.module === 'audit') || null)
+        setRecentAudits((audits || []).slice(0, 8))
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
@@ -625,6 +633,29 @@ export default function OrganizationDashboard({ organizationId, organizationName
             data={combinedFatalRisk.map((r) => ({ label: r.fatal_risk, jsa: Number(r.jsa_count), flra: Number(r.flra_count) }))}
             seriesA="jsa" seriesB="flra" labelA="JSA" labelB="FLRA" colorA="#16253D" colorB="#B8862B"
           />
+        </div>
+      </div>
+
+      <div className="border-l-4 pl-3 mb-3 mt-6" style={{ borderColor: '#16253D' }}>
+        <h2 className="font-display text-base font-bold text-navy">Audit Tracking</h2>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2.5 mb-3">
+        <StatCard label="Completed" value={auditStatus?.completed_count ?? '—'} />
+        <StatCard label="Overdue" value={auditStatus?.overdue_count ?? '—'} />
+        <StatCard label="In Progress" value={auditStatus?.in_progress_count ?? '—'} />
+      </div>
+
+      <div className="bg-white border border-line rounded-md p-3 mb-3">
+        <div className="font-display text-[13px] font-semibold text-navy mb-2">Recent Audits</div>
+        <div className="flex flex-col gap-1.5">
+          {recentAudits.map((a) => (
+            <div key={a.id} className="flex justify-between items-center text-[11px] border border-line rounded p-1.5">
+              <span className="font-medium">{a.name}</span>
+              <span className="text-inksoft">{new Date(a.created_at).toLocaleDateString()}</span>
+            </div>
+          ))}
+          {!recentAudits.length && <div className="text-xs text-inksoft italic">No audits recorded yet.</div>}
         </div>
       </div>
 
